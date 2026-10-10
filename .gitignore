@@ -1,0 +1,6 @@
+*.exe
+*.exe~
+server.log
+*.db
+*.db-wal
+*.db-shm
