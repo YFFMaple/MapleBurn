@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"time"
@@ -44,7 +46,7 @@ func main() {
 		dataDir: dataDir,
 		config:  loadConfig(dataDir),
 	}
-	srv.scanner = scanner.New(db, srv.prices, srv.config.LogDirs)
+	srv.scanner = scanner.New(db, srv.prices, srv.config.Dirs())
 
 	// 找一个可用端口（127.0.0.1 只监听本机回环，外部无法访问）
 	listener, port, err := listenLocal(17820, 17840)
@@ -76,7 +78,20 @@ func main() {
 
 	go openBrowser(url)
 
-	if err := http.Serve(listener, mux); err != nil {
+	httpSrv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+
+	// Ctrl+C 时优雅退出，让 defer db.Close() 有机会执行
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	go func() {
+		<-ctx.Done()
+		fmt.Println("\n正在退出…")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		httpSrv.Shutdown(shutdownCtx)
+	}()
+
+	if err := httpSrv.Serve(listener); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
 }

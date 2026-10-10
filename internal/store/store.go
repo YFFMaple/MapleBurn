@@ -59,7 +59,8 @@ func (d *DB) migrate() error {
 			cost          REAL NOT NULL DEFAULT 0
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_usages_date ON usages(date)`,
-		`CREATE INDEX IF NOT EXISTS idx_usages_model ON usages(model)`,
+		// 早期版本建过 idx_usages_model，但所有按模型的查询都先按 date 过滤，用不上，清掉
+		`DROP INDEX IF EXISTS idx_usages_model`,
 		// 记录每个日志文件已扫描到的字节偏移，实现增量扫描
 		`CREATE TABLE IF NOT EXISTS file_offsets (
 			path   TEXT PRIMARY KEY,
@@ -79,9 +80,9 @@ func (d *DB) migrate() error {
 	return nil
 }
 
-// AllForReprice 读取全部记录（重算费用用）
+// AllForReprice 读取全部记录（重算费用用），含当前 cost 以便跳过未变化的行
 func (d *DB) AllForReprice() ([]Usage, error) {
-	rows, err := d.db.Query(`SELECT hash, model, input_tokens, output_tokens, cache_create, cache_read FROM usages`)
+	rows, err := d.db.Query(`SELECT hash, model, input_tokens, output_tokens, cache_create, cache_read, cost FROM usages`)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +91,7 @@ func (d *DB) AllForReprice() ([]Usage, error) {
 	var out []Usage
 	for rows.Next() {
 		var u Usage
-		if err := rows.Scan(&u.Hash, &u.Model, &u.InputTokens, &u.OutputTokens, &u.CacheCreate, &u.CacheRead); err != nil {
+		if err := rows.Scan(&u.Hash, &u.Model, &u.InputTokens, &u.OutputTokens, &u.CacheCreate, &u.CacheRead, &u.Cost); err != nil {
 			return nil, err
 		}
 		out = append(out, u)
@@ -104,8 +105,22 @@ type CostUpdate struct {
 	Cost float64
 }
 
-// UpdateCosts 批量更新费用。返回更新条数。
+// UpdateCosts 批量更新费用（分片事务，避免大表单事务锁库过久）。返回更新条数。
 func (d *DB) UpdateCosts(items []CostUpdate) (int, error) {
+	const chunk = 2000
+	total := 0
+	for start := 0; start < len(items); start += chunk {
+		end := min(start+chunk, len(items))
+		n, err := d.updateCostsChunk(items[start:end])
+		total += n
+		if err != nil {
+			return total, err
+		}
+	}
+	return total, nil
+}
+
+func (d *DB) updateCostsChunk(items []CostUpdate) (int, error) {
 	tx, err := d.db.Begin()
 	if err != nil {
 		return 0, err
@@ -178,7 +193,8 @@ func (d *DB) SetOffset(path string, off int64) error {
 	return err
 }
 
-// InsertUsages 批量写入，hash 冲突（重复记录）自动忽略。返回实际新增条数。
+// InsertUsages 批量写入。hash 相同视为同一条消息的不同快照（流式写入会产生多行），
+// 保留 token 数更大的一行；完全相同的重复行不受影响。返回实际新增/更新条数。
 func (d *DB) InsertUsages(list []Usage) (int, error) {
 	tx, err := d.db.Begin()
 	if err != nil {
@@ -187,9 +203,17 @@ func (d *DB) InsertUsages(list []Usage) (int, error) {
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare(
-		`INSERT OR IGNORE INTO usages
+		`INSERT INTO usages
 		 (hash, ts, date, model, project, session_id, input_tokens, output_tokens, cache_create, cache_read, cost)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(hash) DO UPDATE SET
+		   ts = excluded.ts, date = excluded.date, model = excluded.model,
+		   project = excluded.project, session_id = excluded.session_id,
+		   input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
+		   cache_create = excluded.cache_create, cache_read = excluded.cache_read,
+		   cost = excluded.cost
+		 WHERE excluded.input_tokens + excluded.output_tokens + excluded.cache_create + excluded.cache_read
+		     > usages.input_tokens + usages.output_tokens + usages.cache_create + usages.cache_read`)
 	if err != nil {
 		return 0, err
 	}

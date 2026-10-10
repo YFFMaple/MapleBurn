@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"maps"
 	"net/http"
 	"os"
@@ -87,16 +88,22 @@ func Load(dir string) *Table {
 		if json.Unmarshal(data, &raw) == nil {
 			for k, v := range raw {
 				v.Custom = true
-				t.overrides[k] = v
+				t.overrides[strings.ToLower(k)] = v
 			}
+		} else {
+			log.Printf("pricing: pricing.json 解析失败，已忽略: %v", err)
 		}
 	}
 
 	if data, err := os.ReadFile(filepath.Join(dir, "community_pricing.json")); err == nil {
 		var cache communityCache
 		if json.Unmarshal(data, &cache) == nil {
-			t.community = cache.Prices
+			for k, v := range cache.Prices {
+				t.community[strings.ToLower(k)] = v
+			}
 			t.fetchedAt = cache.FetchedAt
+		} else {
+			log.Printf("pricing: community_pricing.json 解析失败，已忽略: %v", err)
 		}
 	}
 	t.rebuildIndex()
@@ -124,9 +131,10 @@ func buildIndexLocked(community map[string]Price) map[string]Price {
 		}
 		provider := strings.ToLower(key[:slash])
 		bare := strings.ToLower(key[slash+1:])
+		official := officialProviders[provider]
 		e, exists := best[bare]
-		if !exists || (officialProviders[provider] && !e.official) {
-			best[bare] = entry{price: p, official: officialProviders[provider]}
+		if !exists || (official && !e.official) {
+			best[bare] = entry{price: p, official: official}
 		}
 	}
 	out := make(map[string]Price, len(best))
@@ -136,24 +144,28 @@ func buildIndexLocked(community map[string]Price) map[string]Price {
 	return out
 }
 
-// candidates 模型名的匹配候选：原名 → 去日期后缀 → 去方括号后缀
+// candidates 模型名的匹配候选：原名 → 循环剥离日期/方括号后缀直到稳定
+// （覆盖 kimi-k3[1m]、claude-x-20250929 以及两种后缀叠加的情况）
 func candidates(model string) []string {
 	out := []string{model}
-	if s := dateSuffix.ReplaceAllString(model, ""); s != model {
-		out = append(out, s)
-	}
-	if s := bracketSuffix.ReplaceAllString(model, ""); s != model {
+	s := model
+	for {
+		next := dateSuffix.ReplaceAllString(bracketSuffix.ReplaceAllString(s, ""), "")
+		if next == s {
+			break
+		}
+		s = next
 		out = append(out, s)
 	}
 	return out
 }
 
-// Lookup 查询模型价格：自定义 > 社区 > 内置；先试精确/去后缀，最后试官方渠道前缀匹配
+// Lookup 查询模型价格：自定义 > 社区（精确/裸名索引，官方渠道优先）> 内置兜底
 func (t *Table) Lookup(model string) (Price, bool) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	cs := candidates(model)
+	cs := candidates(strings.ToLower(model))
 	for _, c := range cs {
 		if p, ok := t.overrides[c]; ok {
 			return p, true
@@ -164,14 +176,15 @@ func (t *Table) Lookup(model string) (Price, bool) {
 			return p, true
 		}
 	}
+	// 裸名索引：kimi-k3 → moonshot/kimi-k3（官方渠道优先）。
+	// 排在内置之前：社区官方价通常比内置兜底更新
 	for _, c := range cs {
-		if p, ok := builtin[c]; ok {
+		if p, ok := t.communityIndex[c]; ok {
 			return p, true
 		}
 	}
-	// 裸名索引：kimi-k3 → moonshot/kimi-k3（官方渠道优先）
 	for _, c := range cs {
-		if p, ok := t.communityIndex[strings.ToLower(c)]; ok {
+		if p, ok := builtin[c]; ok {
 			return p, true
 		}
 	}
@@ -217,23 +230,28 @@ func (t *Table) CommunityInfo() CommunityInfo {
 
 // Update 联网拉取社区价格表并缓存到本地。返回模型数和来源地址。
 func (t *Table) Update() (int, string, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
-
 	var lastErr error
 	for _, url := range communityURLs {
-		prices, err := fetchCommunity(client, url)
+		prices, err := fetchCommunity(url)
 		if err != nil {
 			lastErr = err
 			continue
 		}
 
+		// 序列化放在锁外，缩短持锁时间（此时 Lookup 不被阻塞）
+		fetchedAt := time.Now()
+		data, err := json.Marshal(communityCache{FetchedAt: fetchedAt, Prices: prices})
+		if err != nil {
+			return 0, url, err
+		}
+
 		t.mu.Lock()
 		t.community = prices
 		t.communityIndex = buildIndexLocked(prices)
-		t.fetchedAt = time.Now()
-		err = t.saveCommunityLocked()
+		t.fetchedAt = fetchedAt
 		t.mu.Unlock()
-		if err != nil {
+
+		if err := writeFileAtomic(filepath.Join(t.dir, "community_pricing.json"), data); err != nil {
 			return 0, url, err
 		}
 		return len(prices), url, nil
@@ -241,9 +259,19 @@ func (t *Table) Update() (int, string, error) {
 	return 0, "", fmt.Errorf("所有价格源均不可用: %w", lastErr)
 }
 
+// communityClient 复用连接；LiteLLM 价格表一年也更新不了几次，30s 超时足够
+var communityClient = &http.Client{Timeout: 30 * time.Second}
+
 // fetchCommunity 下载并解析 LiteLLM 价格 JSON（单位：美元/token，转换为美元/百万token）
-func fetchCommunity(client *http.Client, url string) (map[string]Price, error) {
-	resp, err := client.Get(url)
+func fetchCommunity(url string) (map[string]Price, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	// raw.githubusercontent.com 对无 UA 的请求偶尔限流
+	req.Header.Set("User-Agent", "aitoken-pricing/1.0")
+
+	resp, err := communityClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +300,7 @@ func fetchCommunity(client *http.Client, url string) (map[string]Price, error) {
 		if p.Input == 0 && p.Output == 0 {
 			continue // 跳过 sample_spec 等非模型条目和免费条目
 		}
-		prices[model] = Price{
+		prices[strings.ToLower(model)] = Price{
 			Input:       p.Input * 1e6,
 			Output:      p.Output * 1e6,
 			CacheCreate: p.CacheCreate * 1e6,
@@ -285,20 +313,12 @@ func fetchCommunity(client *http.Client, url string) (map[string]Price, error) {
 	return prices, nil
 }
 
-func (t *Table) saveCommunityLocked() error {
-	data, err := json.Marshal(communityCache{FetchedAt: t.fetchedAt, Prices: t.community})
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(t.dir, "community_pricing.json"), data, 0644)
-}
-
 // Set 新增/修改一个模型的价格并保存到本地覆盖文件
 func (t *Table) Set(model string, p Price) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	p.Custom = true
-	t.overrides[model] = p
+	t.overrides[strings.ToLower(model)] = p
 	return t.saveOverridesLocked()
 }
 
@@ -306,7 +326,7 @@ func (t *Table) Set(model string, p Price) error {
 func (t *Table) Delete(model string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	delete(t.overrides, model)
+	delete(t.overrides, strings.ToLower(model))
 	return t.saveOverridesLocked()
 }
 
@@ -315,5 +335,23 @@ func (t *Table) saveOverridesLocked() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(t.dir, "pricing.json"), data, 0644)
+	return writeFileAtomic(filepath.Join(t.dir, "pricing.json"), data)
+}
+
+// writeFileAtomic 先写临时文件再改名，避免写入中途崩溃留下半个 JSON。
+// Windows 上 Rename 不能覆盖已存在文件，失败时退化为先删再改。
+func writeFileAtomic(path string, data []byte) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		if rmErr := os.Remove(path); rmErr != nil && !os.IsNotExist(rmErr) {
+			return err
+		}
+		if err := os.Rename(tmp, path); err != nil {
+			return err
+		}
+	}
+	return nil
 }

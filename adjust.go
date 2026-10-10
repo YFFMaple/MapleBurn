@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"aitoken/internal/store"
 )
@@ -21,25 +22,47 @@ type adjustment struct {
 	Factor    float64 `json:"factor"`    // 缩放系数
 }
 
-// adjustment 读取调整状态并计算缩放系数
+// adjustTTL 系数缓存有效期：扫描等操作改变总量后，最多延迟该时间反映到系数上
+const adjustTTL = 3 * time.Second
+
+// adjustment 读取调整状态并计算缩放系数（带短 TTL 缓存，避免每个请求都全表聚合）
 func (s *Server) adjustment() adjustment {
-	adj := adjustment{}
+	s.adjMu.Lock()
+	defer s.adjMu.Unlock()
+	if time.Since(s.adjAt) < adjustTTL {
+		return s.adjCache
+	}
+	total, err := s.db.AllTimeTotals()
+	if err != nil {
+		return adjustment{}
+	}
+	s.adjCache = s.adjustmentFor(total)
+	s.adjAt = time.Now()
+	return s.adjCache
+}
+
+// adjustmentFor 用已知的全量总计计算缩放系数（调用方已查过 AllTimeTotals 时避免重复聚合）
+func (s *Server) adjustmentFor(total store.Totals) adjustment {
+	adj := adjustment{RealTotal: total.TotalTokens}
 	if s.db.GetMeta("adjust_active") != "1" {
 		return adj
 	}
 	target, err := strconv.ParseFloat(s.db.GetMeta("adjust_target"), 64)
-	if err != nil || target <= 0 {
-		return adj
-	}
-	total, err := s.db.AllTimeTotals()
-	if err != nil || total.TotalTokens == 0 {
+	if err != nil || target <= 0 || total.TotalTokens == 0 {
 		return adj
 	}
 	adj.Active = true
 	adj.Target = target
-	adj.RealTotal = total.TotalTokens
 	adj.Factor = target / float64(total.TotalTokens)
 	return adj
+}
+
+// invalidateAdjust 设置/重置后让缓存立即失效
+func (s *Server) invalidateAdjust() {
+	s.adjMu.Lock()
+	s.adjCache = adjustment{}
+	s.adjAt = time.Time{}
+	s.adjMu.Unlock()
 }
 
 // ---- 各类统计的缩放 ----
@@ -107,13 +130,8 @@ func parseTokenAmount(s string) (float64, error) {
 // ---- API ----
 
 func (s *Server) handleGetAdjust(w http.ResponseWriter, r *http.Request) {
-	adj := s.adjustment()
-	if !adj.Active {
-		if total, err := s.db.AllTimeTotals(); err == nil {
-			adj.RealTotal = total.TotalTokens
-		}
-	}
-	writeJSON(w, adj)
+	// adjustment 的 RealTotal 在未启用时也有值（缓存自全量聚合）
+	writeJSON(w, s.adjustment())
 }
 
 func (s *Server) handleSetAdjust(w http.ResponseWriter, r *http.Request) {
@@ -137,6 +155,7 @@ func (s *Server) handleSetAdjust(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	s.invalidateAdjust()
 	writeJSON(w, s.adjustment())
 }
 
@@ -146,5 +165,6 @@ func (s *Server) handleResetAdjust(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	s.invalidateAdjust()
 	writeJSON(w, map[string]bool{"ok": true})
 }

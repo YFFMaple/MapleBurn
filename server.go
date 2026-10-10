@@ -24,6 +24,10 @@ type Server struct {
 	dataDir string
 	config  *Config
 	scanMu  sync.Mutex // 扫描串行化，防止并发触发
+
+	adjMu    sync.Mutex // 校准系数短 TTL 缓存
+	adjCache adjustment
+	adjAt    time.Time
 }
 
 func (s *Server) registerAPI(mux *http.ServeMux) {
@@ -125,7 +129,8 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	if adj := s.adjustment(); adj.Active {
+	// 复用刚查出的 AllTime，避免 adjustment 内部再全表聚合一次
+	if adj := s.adjustmentFor(ov.AllTime); adj.Active {
 		scaleTotals(&ov.Today, adj.Factor)
 		scaleTotals(&ov.Week, adj.Factor)
 		scaleTotals(&ov.Month, adj.Factor)
@@ -151,6 +156,9 @@ func dateRange(r *http.Request) (string, string, error) {
 	}
 	if _, err := time.Parse("2006-01-02", end); err != nil {
 		return "", "", fmt.Errorf("end 日期格式应为 YYYY-MM-DD")
+	}
+	if start > end {
+		return "", "", fmt.Errorf("start 不能晚于 end")
 	}
 	return start, end, nil
 }
@@ -382,7 +390,7 @@ func (s *Server) handleAddLogDir(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	s.scanner.SetDirs(s.config.LogDirs)
+	s.scanner.SetDirs(s.config.Dirs())
 	writeJSON(w, map[string]any{"dirs": s.logDirInfos()})
 }
 
@@ -396,7 +404,7 @@ func (s *Server) handleRemoveLogDir(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	s.scanner.SetDirs(s.config.LogDirs)
+	s.scanner.SetDirs(s.config.Dirs())
 	writeJSON(w, map[string]any{"dirs": s.logDirInfos()})
 }
 
@@ -465,12 +473,33 @@ func (s *Server) handleReprice(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	// 模型种类很少，按模型缓存价格，避免每条记录都加锁查表
+	type lookup struct {
+		price pricing.Price
+		ok    bool
+	}
+	priceCache := map[string]lookup{}
+	costOf := func(u store.Usage) float64 {
+		l, cached := priceCache[u.Model]
+		if !cached {
+			l.price, l.ok = s.prices.Lookup(u.Model)
+			priceCache[u.Model] = l
+		}
+		if !l.ok {
+			return 0
+		}
+		p := l.price
+		return (float64(u.InputTokens)*p.Input + float64(u.OutputTokens)*p.Output +
+			float64(u.CacheCreate)*p.CacheCreate + float64(u.CacheRead)*p.CacheRead) / 1e6
+	}
+
 	updates := make([]store.CostUpdate, 0, len(usages))
 	for _, u := range usages {
-		updates = append(updates, store.CostUpdate{
-			Hash: u.Hash,
-			Cost: s.prices.Cost(u.Model, u.InputTokens, u.OutputTokens, u.CacheCreate, u.CacheRead),
-		})
+		cost := costOf(u)
+		if cost == u.Cost {
+			continue // 价格没变过的记录跳过，减少写入量
+		}
+		updates = append(updates, store.CostUpdate{Hash: u.Hash, Cost: cost})
 	}
 	n, err := s.db.UpdateCosts(updates)
 	if err != nil {

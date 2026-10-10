@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -94,6 +95,11 @@ func (s *Scanner) ReadSessionMessages(project, session string) ([]SessionMessage
 
 // parseMessage 从日志行提取一条文本消息；非文本内容（thinking/工具调用等）跳过
 func parseMessage(line []byte) (SessionMessage, bool) {
+	// 快速预过滤：user/assistant 之外的角色行直接跳过，省去完整 JSON 解析
+	if !bytes.Contains(line, []byte(`"user"`)) && !bytes.Contains(line, []byte(`"assistant"`)) {
+		return SessionMessage{}, false
+	}
+
 	var l msgLine
 	if json.Unmarshal(line, &l) != nil || l.Message == nil || l.IsMeta {
 		return SessionMessage{}, false

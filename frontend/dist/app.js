@@ -315,10 +315,22 @@ async function loadChart() {
 }
 
 // ---------- 模型明细（范围查询） ----------
+// 同一轮刷新中明细面板和模型排行可能请求相同的 /api/models，合并为一个请求
+const modelsInflight = new Map();
+function fetchModels(start, end) {
+  const key = `${start}|${end}`;
+  if (!modelsInflight.has(key)) {
+    const p = apiGet(`/api/models?start=${start}&end=${end}`);
+    modelsInflight.set(key, p);
+    p.then(() => modelsInflight.delete(key), () => modelsInflight.delete(key));
+  }
+  return modelsInflight.get(key);
+}
+
 async function loadDetail() {
   const { start, end } = detailRange;
   if (!start || !end) return;
-  const rep = await apiGet(`/api/models?start=${start}&end=${end}`);
+  const rep = await fetchModels(start, end);
   const t = rep.totals;
 
   $("#daily-summary").innerHTML = `
@@ -372,7 +384,7 @@ async function loadProjects() {
 
 // ---------- 模型排行 ----------
 async function loadModelRank() {
-  const rep = await apiGet(`/api/models?start=${currentRange.start}&end=${currentRange.end}`);
+  const rep = await fetchModels(currentRange.start, currentRange.end);
   const tbody = $("#model-rank-table tbody");
   tbody.innerHTML = "";
   const models = rep.models || [];
@@ -757,5 +769,7 @@ window.addEventListener("load", async () => {
 
   await Promise.all([applyRange(currentRange, "近30天"), loadFooter()]);
   await scan(); // 启动时自动扫描一次
-  setInterval(scan, 60 * 1000); // 每分钟自动增量扫描
+  // 每分钟自动增量扫描；标签页隐藏时暂停，回到前台立即补一次
+  setInterval(() => { if (!document.hidden) scan(); }, 60 * 1000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) scan(); });
 });

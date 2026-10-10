@@ -4,6 +4,7 @@ package scanner
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -76,17 +77,6 @@ func (s *Scanner) Scan() (Result, error) {
 	files, skipped := s.listLogFiles()
 	res.SkippedDirs = skipped
 
-	var batch []store.Usage
-	flush := func() error {
-		if len(batch) == 0 {
-			return nil
-		}
-		n, err := s.db.InsertUsages(batch)
-		res.NewRecords += n
-		batch = batch[:0]
-		return err
-	}
-
 	for _, f := range files {
 		res.FilesScanned++
 		offset, err := s.db.GetOffset(f)
@@ -102,17 +92,19 @@ func (s *Scanner) Scan() (Result, error) {
 			continue
 		}
 		res.LinesParsed += parsed
-		batch = append(batch, usages...)
-		if len(batch) >= 500 {
-			if err := flush(); err != nil {
+		// 先落盘再推进 offset：若顺序颠倒，进程在两者之间崩溃会永久丢掉这批记录
+		if len(usages) > 0 {
+			n, err := s.db.InsertUsages(usages)
+			if err != nil {
 				return res, err
 			}
+			res.NewRecords += n
 		}
 		if err := s.db.SetOffset(f, newOffset); err != nil {
 			return res, err
 		}
 	}
-	return res, flush()
+	return res, nil
 }
 
 // listLogFiles 遍历所有配置的目录收集日志文件；不存在的目录记入 skipped 而不是报错
@@ -188,6 +180,12 @@ func (s *Scanner) scanFile(path string, offset int64, project, sessionID string)
 
 // parseLine 解析单行日志；不是带用量的 assistant 消息时返回 false
 func (s *Scanner) parseLine(line []byte, project, sessionID string) (store.Usage, bool) {
+	// 快速预过滤：不含这两个子串的行一定不是带用量的 assistant 消息，
+	// 避免对每行（含大 content 的 user/工具行）都做完整 JSON 解析
+	if !bytes.Contains(line, []byte(`"assistant"`)) || !bytes.Contains(line, []byte(`"usage"`)) {
+		return store.Usage{}, false
+	}
+
 	var l logLine
 	if json.Unmarshal(line, &l) != nil ||
 		l.Type != "assistant" || l.Message == nil || l.Message.Usage == nil || l.Message.Model == "" {
@@ -205,12 +203,16 @@ func (s *Scanner) parseLine(line []byte, project, sessionID string) (store.Usage
 		return store.Usage{}, false
 	}
 
-	// 去重哈希：同一条消息在流式写入时会出现多行，usage 完全相同，哈希相同被忽略
-	id := l.Message.ID
-	if id == "" {
-		id = sessionID + "|" + l.Timestamp
+	// 去重哈希：同一条消息（message.id）在流式写入时可能出现多行，usage 逐行累积。
+	// 只按消息 ID 哈希，入库时冲突保留 token 数最大的一行（最终快照），避免重复计数。
+	// 无 ID 时退化为 会话|时间戳|token 数 的指纹。
+	var h [sha1.Size]byte
+	if id := l.Message.ID; id != "" {
+		h = sha1.Sum(fmt.Appendf(nil, "id|%s", id))
+	} else {
+		h = sha1.Sum(fmt.Appendf(nil, "%s|%s|%d|%d|%d|%d",
+			sessionID, l.Timestamp, u.InputTokens, u.OutputTokens, u.CacheCreate, u.CacheRead))
 	}
-	h := sha1.Sum(fmt.Appendf(nil, "%s|%d|%d|%d|%d", id, u.InputTokens, u.OutputTokens, u.CacheCreate, u.CacheRead))
 
 	model := l.Message.Model
 	return store.Usage{

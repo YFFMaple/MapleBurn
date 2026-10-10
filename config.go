@@ -5,12 +5,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // Config 应用配置，持久化到数据目录的 config.json（仅本机）
 type Config struct {
 	LogDirs []string `json:"logDirs"` // 日志目录列表，扫描时全部遍历
 	path    string
+	mu      sync.RWMutex
 }
 
 // defaultLogDirs 自动探测默认日志目录：
@@ -38,11 +40,22 @@ func loadConfig(dataDir string) *Config {
 }
 
 func (c *Config) save() error {
-	data, err := json.MarshalIndent(c, "", "  ")
+	c.mu.RLock()
+	data, err := json.MarshalIndent(struct {
+		LogDirs []string `json:"logDirs"`
+	}{LogDirs: c.LogDirs}, "", "  ")
+	c.mu.RUnlock()
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(c.path, data, 0644)
+}
+
+// Dirs 返回当前日志目录列表的副本
+func (c *Config) Dirs() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return append([]string(nil), c.LogDirs...)
 }
 
 // AddLogDir 添加目录；返回是否真正新增（重复或空则 false）
@@ -51,6 +64,8 @@ func (c *Config) AddLogDir(dir string) bool {
 	if dir == "" {
 		return false
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	for _, d := range c.LogDirs {
 		if strings.EqualFold(d, dir) {
 			return false
@@ -62,6 +77,8 @@ func (c *Config) AddLogDir(dir string) bool {
 
 // RemoveLogDir 删除目录；不允许删光
 func (c *Config) RemoveLogDir(dir string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if len(c.LogDirs) <= 1 {
 		return false
 	}
