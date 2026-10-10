@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"aitoken/internal/store"
+	"github.com/YFFMaple/aitoken/internal/store"
 )
 
 // ---- 显示层数据调整（不修改真实记录，查询时按比例缩放，可随时回滚） ----

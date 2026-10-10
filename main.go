@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"aitoken/internal/pricing"
-	"aitoken/internal/scanner"
-	"aitoken/internal/store"
+	"github.com/YFFMaple/aitoken/internal/pricing"
+	"github.com/YFFMaple/aitoken/internal/scanner"
+	"github.com/YFFMaple/aitoken/internal/store"
 )
 
 //go:embed all:frontend/dist

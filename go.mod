@@ -1,4 +1,4 @@
-module aitoken
+module github.com/YFFMaple/aitoken
 
 go 1.26.5
 

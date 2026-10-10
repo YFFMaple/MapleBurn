@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"aitoken/internal/pricing"
-	"aitoken/internal/scanner"
-	"aitoken/internal/store"
+	"github.com/YFFMaple/aitoken/internal/pricing"
+	"github.com/YFFMaple/aitoken/internal/scanner"
+	"github.com/YFFMaple/aitoken/internal/store"
 )
 
 // Server 本地 HTTP API，只服务 127.0.0.1

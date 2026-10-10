@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"aitoken/internal/pricing"
-	"aitoken/internal/store"
+	"github.com/YFFMaple/aitoken/internal/pricing"
+	"github.com/YFFMaple/aitoken/internal/store"
 )
 
 // logLine Claude Code 日志行（只取需要的字段）

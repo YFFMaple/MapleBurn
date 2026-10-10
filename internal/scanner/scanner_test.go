@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"aitoken/internal/pricing"
-	"aitoken/internal/scanner"
-	"aitoken/internal/store"
+	"github.com/YFFMaple/aitoken/internal/pricing"
+	"github.com/YFFMaple/aitoken/internal/scanner"
+	"github.com/YFFMaple/aitoken/internal/store"
 )
 
 // 用真实的 ~/.claude/projects 日志验证扫描、入库与去重
