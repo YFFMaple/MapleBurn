@@ -11,14 +11,18 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
+// widgetItem 小组件菜单项，窗口开关状态变化时同步勾选
+var widgetItem *systray.MenuItem
+
 // Run 在调用方 goroutine 运行托盘图标（会阻塞，通常放在主 goroutine）。
-// onOpen 打开面板，onExit 退出程序（应先做清理再返回）。
-func Run(onOpen, onExit func()) {
+// onOpen 打开面板，onWidget 切换小组件窗口，onExit 退出程序（应先做清理再返回）。
+func Run(onOpen, onExit, onWidget func(), widgetOpen bool) {
 	systray.Run(func() {
 		migrateAutostart()
 		systray.SetIcon(iconBytes())
 		systray.SetTooltip("燃枫 MapleBurn")
 		mOpen := systray.AddMenuItem("打开面板", "在浏览器中打开")
+		widgetItem = systray.AddMenuItemCheckbox("小组件", "桌面小窗实时显示今日用量", widgetOpen)
 		systray.AddSeparator()
 		mQuit := systray.AddMenuItem("退出", "还原配置并退出")
 		go func() {
@@ -26,6 +30,8 @@ func Run(onOpen, onExit func()) {
 				select {
 				case <-mOpen.ClickedCh:
 					onOpen()
+				case <-widgetItem.ClickedCh:
+					onWidget()
 				case <-mQuit.ClickedCh:
 					onExit()
 					systray.Quit()
@@ -35,6 +41,21 @@ func Run(onOpen, onExit func()) {
 		}()
 	}, func() {})
 }
+
+// SetWidgetChecked 同步小组件菜单的勾选状态（窗口被直接关掉时也要反勾选）
+func SetWidgetChecked(open bool) {
+	if widgetItem == nil {
+		return
+	}
+	if open {
+		widgetItem.Check()
+	} else {
+		widgetItem.Uncheck()
+	}
+}
+
+// SetTooltip 更新托盘悬停提示（显示实时用量）
+func SetTooltip(text string) { systray.SetTooltip(text) }
 
 // mapleLeaf 枫叶轮廓（0~100 坐标，对称的多边形，从上尖点顺时针一圈）
 var mapleLeaf = [][2]float64{

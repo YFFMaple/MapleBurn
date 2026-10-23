@@ -25,6 +25,7 @@ import (
 	"github.com/YFFMaple/MapleBurn/internal/service"
 	"github.com/YFFMaple/MapleBurn/internal/store"
 	"github.com/YFFMaple/MapleBurn/internal/tray"
+	"github.com/YFFMaple/MapleBurn/internal/widget"
 )
 
 //go:embed all:frontend/dist
@@ -116,6 +117,32 @@ func main() {
 
 	go openBrowser(url)
 
+	// 桌面小组件：WebView2 小窗，复用同一个本地服务；开关状态持久化
+	widgetMgr := widget.New(cfg)
+	widgetMgr.OnStateChange(func(open bool) {
+		c := cfg.WidgetCfg()
+		c.Open = open
+		cfg.SetWidget(c)
+		if err := cfg.Save(); err != nil {
+			log.Println("保存小组件开关失败:", err)
+		}
+		tray.SetWidgetChecked(open)
+	})
+	if cfg.WidgetCfg().Open {
+		widgetMgr.Show(url + "/widget.html")
+	}
+
+	// 托盘悬停提示跟数据走，每分钟刷新一次今日用量
+	go func() {
+		for {
+			if sum, err := svc.WidgetSummary(); err == nil {
+				tray.SetTooltip(fmt.Sprintf("燃枫 MapleBurn\n今日 %s tokens · %d 次请求 · 缓存命中 %.1f%%",
+					compactNum(sum.Today.TotalTokens), sum.Today.Requests, sum.CacheHit*100))
+			}
+			time.Sleep(time.Minute)
+		}
+	}()
+
 	httpSrv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 
 	// Ctrl+C 时优雅退出，让 defer db.Close() 有机会执行
@@ -161,6 +188,8 @@ func main() {
 			defer cancel()
 			httpSrv.Shutdown(shutdownCtx)
 		},
+		func() { widgetMgr.Toggle(url + "/widget.html") },
+		cfg.WidgetCfg().Open,
 	)
 }
 
@@ -205,4 +234,18 @@ func listenLocal(from, to int) (net.Listener, int, error) {
 func openBrowser(url string) {
 	time.Sleep(300 * time.Millisecond)
 	exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+}
+
+// compactNum 大数字缩写（托盘提示用）：1.2K / 3.4M / 5.6B
+func compactNum(n int) string {
+	switch {
+	case n >= 1_000_000_000:
+		return fmt.Sprintf("%.1fB", float64(n)/1e9)
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1e6)
+	case n >= 1_000:
+		return fmt.Sprintf("%.1fK", float64(n)/1e3)
+	default:
+		return fmt.Sprintf("%d", n)
+	}
 }

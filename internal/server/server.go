@@ -28,6 +28,7 @@ func (s *Server) RegisterAPI(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/scan", s.handleScan)
 	mux.HandleFunc("POST /api/rescan", s.handleRescan)
 	mux.HandleFunc("GET /api/overview", s.handleOverview)
+	mux.HandleFunc("GET /api/widget", s.handleWidget)
 	mux.HandleFunc("GET /api/range", s.handleRange)
 	mux.HandleFunc("GET /api/daily", s.handleDaily)
 	mux.HandleFunc("GET /api/models", s.handleModels)
@@ -88,6 +89,16 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, ov)
+}
+
+// handleWidget 桌面小组件的聚合数据
+func (s *Server) handleWidget(w http.ResponseWriter, r *http.Request) {
+	sum, err := s.svc.WidgetSummary()
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, sum)
 }
 
 func (s *Server) handleRange(w http.ResponseWriter, r *http.Request) {

@@ -238,6 +238,17 @@ const zh = {
   "proxy.fetchFail": "更新失败：{msg}",
   "proxy.adapterTip": "adapter: {adapter} · 匹配: {hosts}",
 
+  // 桌面小组件
+  "widget.today": "今日 tokens",
+  "widget.week": "本周",
+  "widget.cacheHit": "缓存命中率",
+  "widget.hourly": "今日逐小时",
+  "widget.pin": "置顶",
+  "widget.unpin": "取消置顶",
+  "widget.openFull": "打开完整面板",
+  "widget.proxyOn": "代理已开启",
+  "widget.proxyOff": "代理已关闭",
+
   // 通用
   "common.total": "总 tokens",
   "common.ms": "ms",
@@ -460,6 +471,16 @@ const en: Record<Key, string> = {
   "proxy.fetchDone": "Registry updated, {n} providers",
   "proxy.fetchFail": "Update failed: {msg}",
   "proxy.adapterTip": "adapter: {adapter} · matches: {hosts}",
+
+  "widget.today": "Today",
+  "widget.week": "This week",
+  "widget.cacheHit": "Cache hit rate",
+  "widget.hourly": "Today by hour",
+  "widget.pin": "Pin on top",
+  "widget.unpin": "Unpin",
+  "widget.openFull": "Open full dashboard",
+  "widget.proxyOn": "Proxy on",
+  "widget.proxyOff": "Proxy off",
 
   "common.total": "Total tokens",
   "common.ms": "ms",

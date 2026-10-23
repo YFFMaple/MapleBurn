@@ -23,9 +23,19 @@ type ProxyConfig struct {
 	PrevBaseURLExists bool   `json:"prevBaseURLExists,omitempty"`
 }
 
+// WidgetConfig 桌面小组件窗口：开关、置顶与上次位置
+type WidgetConfig struct {
+	Open    bool `json:"open"`
+	Topmost bool `json:"topmost"`
+	X       int  `json:"x"`
+	Y       int  `json:"y"`
+	HasPos  bool `json:"hasPos"` // 是否存过位置（首次打开走默认位置）
+}
+
 type Config struct {
-	LogDirs []string    `json:"logDirs"` // 日志目录列表，扫描时全部遍历
-	Proxy   ProxyConfig `json:"proxy"`
+	LogDirs []string     `json:"logDirs"` // 日志目录列表，扫描时全部遍历
+	Proxy   ProxyConfig  `json:"proxy"`
+	Widget  WidgetConfig `json:"widget"`
 	path    string
 	mu      sync.RWMutex
 }
@@ -57,9 +67,10 @@ func Load(dataDir string) *Config {
 func (c *Config) Save() error {
 	c.mu.RLock()
 	data, err := json.MarshalIndent(struct {
-		LogDirs []string    `json:"logDirs"`
-		Proxy   ProxyConfig `json:"proxy"`
-	}{LogDirs: c.LogDirs, Proxy: c.Proxy}, "", "  ")
+		LogDirs []string     `json:"logDirs"`
+		Proxy   ProxyConfig  `json:"proxy"`
+		Widget  WidgetConfig `json:"widget"`
+	}{LogDirs: c.LogDirs, Proxy: c.Proxy, Widget: c.Widget}, "", "  ")
 	c.mu.RUnlock()
 	if err != nil {
 		return err
@@ -82,6 +93,20 @@ func (c *Config) ProxyCfg() ProxyConfig {
 func (c *Config) SetProxy(p ProxyConfig) {
 	c.mu.Lock()
 	c.Proxy = p
+	c.mu.Unlock()
+}
+
+// WidgetCfg 返回小组件配置副本
+func (c *Config) WidgetCfg() WidgetConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Widget
+}
+
+// SetWidget 更新小组件配置（不落盘，调用方负责 Save）
+func (c *Config) SetWidget(w WidgetConfig) {
+	c.mu.Lock()
+	c.Widget = w
 	c.mu.Unlock()
 }
 

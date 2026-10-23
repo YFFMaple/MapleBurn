@@ -98,6 +98,53 @@ func (s *Service) Overview() (*Overview, error) {
 	return ov, nil
 }
 
+// WidgetSummary 桌面小组件一屏需要的全部数据：今日/本周总量、缓存命中率、
+// 今日逐小时分布、观测代理状态。一次请求拿齐，供小组件高频轮询。
+type WidgetSummary struct {
+	Today    store.Totals `json:"today"`
+	Week     store.Totals `json:"week"`
+	CacheHit float64      `json:"cacheHit"` // 0~1
+	Hourly   []int64      `json:"hourly"`   // 今天 24 小时的 token 分布
+	ProxyOn  bool         `json:"proxyOn"`
+	ProxyRun bool         `json:"proxyRun"`
+}
+
+func (s *Service) WidgetSummary() (*WidgetSummary, error) {
+	now := time.Now()
+	today := now.Format("2006-01-02")
+	weekStart := now.AddDate(0, 0, -int(now.Weekday()+6)%7).Format("2006-01-02")
+
+	w := &WidgetSummary{}
+	var err error
+	if w.Today, err = s.db.TotalsForDate(today); err != nil {
+		return nil, err
+	}
+	if w.Week, err = s.db.TotalsBetween(weekStart, today); err != nil {
+		return nil, err
+	}
+	grid, err := s.db.Heatmap(today, today)
+	if err != nil {
+		return nil, err
+	}
+	dow := (int(now.Weekday()) + 6) % 7 // grid 以周一开头
+	w.Hourly = grid[dow]
+
+	if adj := s.Adjustment(); adj.Active {
+		scaleTotals(&w.Today, adj.Factor)
+		scaleTotals(&w.Week, adj.Factor)
+		for h := range w.Hourly {
+			w.Hourly[h] = int64(math.Round(float64(w.Hourly[h]) * adj.Factor))
+		}
+	}
+	if in := w.Today.InputTokens + w.Today.CacheCreate + w.Today.CacheRead; in > 0 {
+		w.CacheHit = float64(w.Today.CacheRead) / float64(in)
+	}
+	st := s.ProxyStatus()
+	w.ProxyOn = st.Enabled
+	w.ProxyRun = st.Running
+	return w, nil
+}
+
 // RangeTotals 日期区间总计
 func (s *Service) RangeTotals(start, end string) (store.Totals, error) {
 	t, err := s.db.TotalsBetween(start, end)
