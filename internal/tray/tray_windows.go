@@ -16,8 +16,10 @@ import (
 // 否则 systray 内部句柄还是 nil，会直接 panic
 var ready atomic.Bool
 
-// widgetItem 小组件菜单项，窗口开关状态变化时同步勾选
+// widgetItem 小组件菜单项；widgetChecked 记录目标勾选状态，
+// 窗口在托盘就绪前打开时先记账，就绪后补应用（否则勾选状态对不上）
 var widgetItem *systray.MenuItem
+var widgetChecked atomic.Bool
 
 // Run 在调用方 goroutine 运行托盘图标（会阻塞，通常放在主 goroutine）。
 // onOpen 打开面板，onWidget 切换小组件窗口，onExit 退出程序（应先做清理再返回）。
@@ -28,6 +30,7 @@ func Run(onOpen, onExit, onWidget func(), widgetOpen bool) {
 		systray.SetTooltip("燃枫 MapleBurn")
 		ready.Store(true)
 		mOpen := systray.AddMenuItem("打开面板", "在浏览器中打开")
+		widgetChecked.Store(widgetOpen)
 		widgetItem = systray.AddMenuItemCheckbox("小组件", "桌面小窗实时显示今日用量", widgetOpen)
 		systray.AddSeparator()
 		mQuit := systray.AddMenuItem("退出", "还原配置并退出")
@@ -50,7 +53,8 @@ func Run(onOpen, onExit, onWidget func(), widgetOpen bool) {
 
 // SetWidgetChecked 同步小组件菜单的勾选状态（窗口被直接关掉时也要反勾选）
 func SetWidgetChecked(open bool) {
-	if widgetItem == nil {
+	widgetChecked.Store(open)
+	if !ready.Load() || widgetItem == nil {
 		return
 	}
 	if open {

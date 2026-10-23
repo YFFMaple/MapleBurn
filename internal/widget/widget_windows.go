@@ -19,6 +19,7 @@ import (
 var (
 	user32          = windows.NewLazySystemDLL("user32.dll")
 	dwmapi          = windows.NewLazySystemDLL("dwmapi.dll")
+	comctl32        = windows.NewLazySystemDLL("comctl32.dll")
 	setWindowPos    = user32.NewProc("SetWindowPos")
 	getWindowRect   = user32.NewProc("GetWindowRect")
 	isIconic        = user32.NewProc("IsIconic")
@@ -27,7 +28,11 @@ var (
 	releaseCapture  = user32.NewProc("ReleaseCapture")
 	sendMessage     = user32.NewProc("SendMessageW")
 	showWindow      = user32.NewProc("ShowWindow")
+	getKeyState     = user32.NewProc("GetKeyState")
 	dwmSetAttribute = dwmapi.NewProc("DwmSetWindowAttribute")
+	dwmExtendFrame  = dwmapi.NewProc("DwmExtendFrameIntoClientArea")
+	setSubclass     = comctl32.NewProc("SetWindowSubclass")
+	defSubclassProc = comctl32.NewProc("DefSubclassProc")
 )
 
 const (
@@ -41,9 +46,64 @@ const (
 
 	gwlStyle        = ^uintptr(15) // -16
 	wmNclbuttondown = 0xA1
+	wmNccalcsize    = 0x83
+	wmNchittest     = 0x84
 	htcaption       = 2
 	swMinimize      = 6
+
+	// NCHITTEST 返回值
+	htLeft        = 10
+	htRight       = 11
+	htTop         = 12
+	htTopleft     = 13
+	htTopright    = 14
+	htBottom      = 15
+	htBottomleft  = 16
+	htBottomright = 17
+
+	resizeBorder = 6 // 边缘多少像素内算"在拉边框"
 )
+
+// subclassProc 无边框窗口的子类化回调：
+// WM_NCCALCSIZE 返回 0 把非客户区清零（消灭白色边框，客户区铺满整个窗口），
+// WM_NCHITTEST 手动做边缘缩放判定（非客户区没了之后粗边框不再自动生效）
+var subclassProc = windows.NewCallback(func(hwnd, msg, wp, lp, _, _ uintptr) uintptr {
+	switch msg {
+	case wmNccalcsize:
+		if wp != 0 {
+			return 0
+		}
+	case wmNchittest:
+		x := int(int16(lp & 0xffff))
+		y := int(int16(lp >> 16))
+		var r windows.Rect
+		getWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&r)))
+		l := x < int(r.Left)+resizeBorder
+		rt := x >= int(r.Right)-resizeBorder
+		tp := y < int(r.Top)+resizeBorder
+		bt := y >= int(r.Bottom)-resizeBorder
+		switch {
+		case tp && l:
+			return htTopleft
+		case tp && rt:
+			return htTopright
+		case bt && l:
+			return htBottomleft
+		case bt && rt:
+			return htBottomright
+		case tp:
+			return htTop
+		case bt:
+			return htBottom
+		case l:
+			return htLeft
+		case rt:
+			return htRight
+		}
+	}
+	ret, _, _ := defSubclassProc.Call(hwnd, msg, wp, lp)
+	return ret
+})
 
 // Manager 小组件窗口生命周期：同一时刻最多一个窗口，开关状态持久化到配置
 type Manager struct {
@@ -141,14 +201,17 @@ func (m *Manager) loop(url string) {
 	wc := m.cfg.WidgetCfg()
 	hwnd := uintptr(w.Window())
 	makeFrameless(hwnd)
-	w.SetSize(320, 520, webview2.HintNone)
-	w.SetSize(300, 420, webview2.HintMin) // 最小尺寸，避免被拖成一条
-	w.Navigate(url)
 
-	// 自绘标题栏的拖拽/最小化/关闭都经绑定回到这里
+	// 绑定必须在 Navigate 之前注册——Init 脚本只对之后的页面加载生效，
+	// 顺序反了页面里可能拿不到 widgetDrag 等函数（表现为最小化/关闭按钮不出现）
 	w.Bind("widgetDrag", func() {
-		releaseCapture.Call()
-		sendMessage.Call(hwnd, wmNclbuttondown, htcaption, 0)
+		w.Dispatch(func() {
+			if down, _, _ := getKeyState.Call(1); down&0x8000 == 0 { // VK_LBUTTON
+				return
+			}
+			releaseCapture.Call()
+			sendMessage.Call(hwnd, wmNclbuttondown, htcaption, 0)
+		})
 	})
 	w.Bind("widgetMinimize", func() {
 		showWindow.Call(hwnd, swMinimize)
@@ -156,7 +219,6 @@ func (m *Manager) loop(url string) {
 	w.Bind("widgetClose", func() {
 		w.Terminate()
 	})
-
 	// 面板里的置顶按钮直接调这个绑定
 	w.Bind("widgetSetTopmost", func(top bool) {
 		setTopmost(hwnd, top)
@@ -167,10 +229,13 @@ func (m *Manager) loop(url string) {
 			log.Println("保存小组件配置失败:", err)
 		}
 	})
-
 	w.Bind("widgetGetTopmost", func() bool {
 		return m.cfg.WidgetCfg().Topmost
 	})
+
+	w.SetSize(320, 520, webview2.HintNone)
+	w.SetSize(300, 420, webview2.HintMin) // 最小尺寸，避免被拖成一条
+	w.Navigate(url)
 
 	if wc.HasPos && wc.X > -10000 && wc.Y > -10000 {
 		setWindowPos.Call(hwnd, 0, uintptr(int32(wc.X)), uintptr(int32(wc.Y)), 0, 0, swpNosize|swpNoactivate)
@@ -204,8 +269,9 @@ func setTopmost(hwnd uintptr, top bool) {
 	setWindowPos.Call(hwnd, after, 0, 0, 0, 0, swpNosize|swpNomove|swpNoactivate)
 }
 
-// makeFrameless 去掉标题栏和系统菜单，保留粗边框（可拖拽缩放）与最小化按钮。
-// 注意不能改成 WS_POPUP——实测会导致 WebView2 子窗口不创建，页面白屏。
+// makeFrameless 无边框化：保留 WS_OVERLAPPEDWINDOW 骨架只去掉标题栏/系统菜单
+// （这台机器上 WS_POPUP 会让 WebView2 不绘制，不能用），白色边框区靠子类化
+// 拦截 WM_NCCALCSIZE 清零非客户区消灭，边缘缩放由 subclassProc 手动命中测试。
 // Win11 上顺便请求 DWM 圆角，Win10 忽略失败保持直角。
 func makeFrameless(hwnd uintptr) {
 	const (
@@ -216,7 +282,13 @@ func makeFrameless(hwnd uintptr) {
 	style, _, _ := getWindowLong.Call(hwnd, gwlStyle)
 	style &^= (wsCaption | wsSysmenu | wsMaximize)
 	setWindowLong.Call(hwnd, gwlStyle, style)
+	setSubclass.Call(hwnd, subclassProc, 1, 0)
 	setWindowPos.Call(hwnd, 0, 0, 0, 0, 0, swpNosize|swpNomove|swpNozorder|swpNoactivate|swpFramechanged)
+
+	// 延伸 1px DWM 边框进客户区，保住窗口阴影
+	type margins struct{ left, right, top, bottom int32 }
+	m := margins{0, 0, 0, 1}
+	dwmExtendFrame.Call(hwnd, uintptr(unsafe.Pointer(&m)), unsafe.Sizeof(m))
 
 	val := uint32(2) // DWMWCP_ROUND
 	dwmSetAttribute.Call(hwnd, 33, uintptr(unsafe.Pointer(&val)), 4) // DWMWA_WINDOW_CORNER_PREFERENCE
