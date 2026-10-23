@@ -2,21 +2,23 @@ import { useEffect, useState } from "react";
 import { CalendarDays } from "lucide-react";
 import { rangeFor, type Range } from "@/lib/utils";
 import { useApp } from "@/store";
+import { useT, type Key } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-const PRESETS: [string, string][] = [
-  ["today", "今天"],
-  ["yesterday", "昨日"],
-  ["7d", "近7天"],
-  ["30d", "近30天"],
-  ["week", "本周"],
-  ["month", "本月"],
-  ["all", "全部"],
+const PRESETS: [string, Key][] = [
+  ["today", "range.today"],
+  ["yesterday", "range.yesterday"],
+  ["7d", "range.7d"],
+  ["30d", "range.30d"],
+  ["week", "range.week"],
+  ["month", "range.month"],
+  ["all", "range.all"],
 ];
 
 export function RangeBar() {
+  const t = useT();
   const { range, preset, setRange } = useApp();
   const [custom, setCustom] = useState<Range>(range);
   useEffect(() => setCustom(range), [range]);
@@ -33,7 +35,7 @@ export function RangeBar() {
               preset === key && "bg-background text-foreground shadow-sm"
             )}
           >
-            {label}
+            {t(label)}
           </button>
         ))}
       </div>
@@ -41,14 +43,14 @@ export function RangeBar() {
         <CalendarDays className="size-3.5" />
         <Input
           type="date"
-          className="h-8 w-[140px] text-xs"
+          className="h-8 w-35 text-xs"
           value={custom.start}
           onChange={(e) => setCustom({ ...custom, start: e.target.value })}
         />
         <span>~</span>
         <Input
           type="date"
-          className="h-8 w-[140px] text-xs"
+          className="h-8 w-35 text-xs"
           value={custom.end}
           onChange={(e) => setCustom({ ...custom, end: e.target.value })}
         />
@@ -58,11 +60,11 @@ export function RangeBar() {
           disabled={!custom.start || !custom.end || custom.start > custom.end}
           onClick={() => setRange(custom, null)}
         >
-          应用
+          {t("range.apply")}
         </Button>
       </div>
       <span className="text-xs text-muted-foreground">
-        当前：{range.start} ~ {range.end}
+        {t("range.current")}{range.start} ~ {range.end}
       </span>
     </div>
   );

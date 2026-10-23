@@ -3,32 +3,34 @@ import { motion } from "motion/react";
 import { apiGet, type Totals } from "@/lib/api";
 import { daysBetween, fmtFull, fmtNum } from "@/lib/utils";
 import { useApp } from "@/store";
+import { useT } from "@/i18n";
 import { Card, CardContent } from "@/components/ui/card";
 
 export function StatCards() {
+  const t = useT();
   const { range, refreshTick } = useApp();
-  const [t, setT] = useState<Totals | null>(null);
+  const [totals, setTotals] = useState<Totals | null>(null);
 
   useEffect(() => {
     apiGet<{ totals: Totals }>(`/api/range?start=${range.start}&end=${range.end}`)
-      .then((r) => setT(r.totals))
+      .then((r) => setTotals(r.totals))
       .catch(() => {});
   }, [range, refreshTick]);
 
   const days = daysBetween(range.start, range.end);
   const cards = [
     {
-      label: "总 Tokens",
-      value: t ? fmtNum(t.totalTokens) : "-",
-      tip: t
-        ? `输入 ${fmtFull(t.inputTokens)} + 输出 ${fmtFull(t.outputTokens)} + 缓存写 ${fmtFull(t.cacheCreate)} + 缓存读 ${fmtFull(t.cacheRead)}`
+      label: t("cards.totalTokens"),
+      value: totals ? fmtNum(totals.totalTokens) : "-",
+      tip: totals
+        ? `${t("detail.input")} ${fmtFull(totals.inputTokens)} + ${t("detail.output")} ${fmtFull(totals.outputTokens)} + ${t("detail.cacheCreate")} ${fmtFull(totals.cacheCreate)} + ${t("detail.cacheRead")} ${fmtFull(totals.cacheRead)}`
         : "",
     },
-    { label: "请求次数", value: t ? fmtFull(t.requests) : "-", tip: "" },
+    { label: t("cards.requests"), value: totals ? fmtFull(totals.requests) : "-", tip: "" },
     {
-      label: "日均 Tokens",
-      value: t ? fmtNum(Math.round(t.totalTokens / days)) : "-",
-      tip: t ? `${fmtFull(Math.round(t.totalTokens / days))} tokens/天` : "",
+      label: t("cards.dailyAvg"),
+      value: totals ? fmtNum(Math.round(totals.totalTokens / days)) : "-",
+      tip: totals ? `${fmtFull(Math.round(totals.totalTokens / days))} ${t("cards.tokensPerDay")}` : "",
     },
   ];
 

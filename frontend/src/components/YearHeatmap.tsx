@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { apiGet, type DayStat } from "@/lib/api";
 import { addDays, fmtFull, fmtNum, todayStr } from "@/lib/utils";
 import { useApp } from "@/store";
+import { useT } from "@/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 // 年度热力图：GitHub 贡献图风格，365 天逐日用量
 export function YearHeatmap() {
+  const t = useT();
   const refreshTick = useApp((s) => s.refreshTick);
   const [series, setSeries] = useState<DayStat[]>([]);
 
@@ -59,9 +61,9 @@ export function YearHeatmap() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>年度热力</CardTitle>
+        <CardTitle>{t("yearmap.title")}</CardTitle>
         <span className="text-xs text-muted-foreground">
-          近一年共 {fmtNum(total)} tokens · 颜色越深用量越大
+          {t("yearmap.hint", { total: fmtNum(total) })}
         </span>
       </CardHeader>
       <CardContent className="overflow-x-auto">
@@ -79,11 +81,11 @@ export function YearHeatmap() {
           ))}
         </div>
         <div className="mt-2 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
-          少
+          {t("yearmap.less")}
           {colors.map((c, i) => (
             <div key={i} className={cn("size-[11px] rounded-[2px]", c)} />
           ))}
-          多
+          {t("yearmap.more")}
         </div>
       </CardContent>
     </Card>

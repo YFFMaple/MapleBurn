@@ -5,6 +5,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import { motion } from "motion/react";
 import { useApp } from "@/store";
+import { useT } from "@/i18n";
 import { RangeBar } from "@/components/RangeBar";
 import { StatCards } from "@/components/StatCards";
 import { TrendChart } from "@/components/TrendChart";
@@ -84,6 +85,7 @@ export function DashboardPage() {
 }
 
 function SortableSection({ id, children }: { id: string; children: React.ReactNode }) {
+  const t = useT();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   return (
     <motion.div
@@ -100,7 +102,7 @@ function SortableSection({ id, children }: { id: string; children: React.ReactNo
           {...attributes}
           {...listeners}
           className="absolute -left-1 top-3 z-10 cursor-grab rounded p-0.5 text-muted-foreground/0 transition-colors group-hover/sec:text-muted-foreground hover:!text-foreground active:cursor-grabbing"
-          title="拖拽调整区块顺序"
+          title={t("dashboard.dragTip")}
         >
           <GripVertical className="size-4" />
         </button>

@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { apiGet, type DayStat } from "@/lib/api";
 import { addDays, daysBetween, fmtFull } from "@/lib/utils";
 import { useApp } from "@/store";
+import { useT } from "@/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export function TrendChart({ onPickDate }: { onPickDate: (date: string) => void }) {
+  const t = useT();
   const { range, refreshTick } = useApp();
   const [series, setSeries] = useState<DayStat[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -24,10 +26,8 @@ export function TrendChart({ onPickDate }: { onPickDate: (date: string) => void 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>
-          趋势（{range.start} ~ {range.end}）
-        </CardTitle>
-        <span className="text-xs text-muted-foreground">点击柱子查看当天明细</span>
+        <CardTitle>{t("trend.title", { range: `${range.start} ~ ${range.end}` })}</CardTitle>
+        <span className="text-xs text-muted-foreground">{t("trend.hint")}</span>
       </CardHeader>
       <CardContent>
         <div className="flex h-[130px] items-end gap-[3px]">
@@ -43,7 +43,7 @@ export function TrendChart({ onPickDate }: { onPickDate: (date: string) => void 
               <div className="pointer-events-none absolute -top-1 z-10 hidden -translate-y-full rounded-md border bg-popover px-2.5 py-1.5 text-xs whitespace-nowrap shadow-lg group-hover:block">
                 {s.date}
                 <br />
-                {fmtFull(s.totalTokens)} tokens
+                {fmtFull(s.totalTokens)} {t("trend.tokens")}
               </div>
               <div
                 className={cn(

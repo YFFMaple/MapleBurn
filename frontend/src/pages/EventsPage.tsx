@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, RefreshCw, Search } from "lucide-react";
 import { apiGet, type UsageRow } from "@/lib/api";
 import { fmtFull, fmtNum, fmtTs } from "@/lib/utils";
 import { useApp } from "@/store";
+import { useT } from "@/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { Input } from "@/components/ui/input";
 const LIMIT = 50;
 
 export function EventsPage() {
+  const t = useT();
   const { range, refreshTick, openChat } = useApp();
   const [model, setModel] = useState("");
   const [project, setProject] = useState("");
@@ -46,24 +48,24 @@ export function EventsPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>请求流水（{range.start} ~ {range.end}）</CardTitle>
+        <CardTitle>{t("events.title", { range: `${range.start} ~ ${range.end}` })}</CardTitle>
         <div className="flex items-center gap-2">
           <Input
             className="h-8 w-36 text-xs"
-            placeholder="模型"
+            placeholder={t("events.modelPh")}
             value={model}
             onChange={(e) => setModel(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && (setOffset(0), load())}
           />
           <Input
             className="h-8 w-36 text-xs"
-            placeholder="项目"
+            placeholder={t("events.projectPh")}
             value={project}
             onChange={(e) => setProject(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && (setOffset(0), load())}
           />
           <Button variant="secondary" size="sm" onClick={() => (setOffset(0), load())}>
-            <Search /> 筛选
+            <Search /> {t("events.filter")}
           </Button>
           <Button variant="ghost" size="sm" onClick={load}>
             <RefreshCw />
@@ -74,14 +76,14 @@ export function EventsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>时间</TableHead>
-              <TableHead>模型</TableHead>
-              <TableHead>项目</TableHead>
-              <TableHead>输入</TableHead>
-              <TableHead>输出</TableHead>
-              <TableHead>缓存写</TableHead>
-              <TableHead>缓存读</TableHead>
-              <TableHead>合计</TableHead>
+              <TableHead>{t("events.time")}</TableHead>
+              <TableHead>{t("table.model")}</TableHead>
+              <TableHead>{t("rank.project")}</TableHead>
+              <TableHead>{t("table.input")}</TableHead>
+              <TableHead>{t("table.output")}</TableHead>
+              <TableHead>{t("table.cacheCreate")}</TableHead>
+              <TableHead>{t("table.cacheRead")}</TableHead>
+              <TableHead>{t("events.sum")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -107,7 +109,7 @@ export function EventsPage() {
           </TableBody>
         </Table>
         {events.length === 0 && (
-          <div className="py-10 text-center text-xs text-muted-foreground">该范围没有记录</div>
+          <div className="py-10 text-center text-xs text-muted-foreground">{t("events.empty")}</div>
         )}
         <div className="mt-4 flex items-center justify-center gap-4">
           <Button
@@ -116,13 +118,13 @@ export function EventsPage() {
             disabled={offset <= 0}
             onClick={() => setOffset(Math.max(0, offset - LIMIT))}
           >
-            <ChevronLeft /> 上一页
+            <ChevronLeft /> {t("events.prev")}
           </Button>
           <span className="text-xs text-muted-foreground">
-            第 {page} / {pages} 页 · 共 {fmtFull(total)} 条
+            {t("events.pager", { page, pages, total: fmtFull(total) })}
           </span>
           <Button variant="secondary" size="sm" disabled={offset + LIMIT >= total} onClick={() => setOffset(offset + LIMIT)}>
-            下一页 <ChevronRight />
+            {t("events.next")} <ChevronRight />
           </Button>
         </div>
       </CardContent>

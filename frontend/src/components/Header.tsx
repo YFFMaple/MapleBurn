@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Moon, Sun, RefreshCw, Settings, FileText, SlidersHorizontal } from "lucide-react";
+import { Moon, Sun, RefreshCw, Settings, FileText, SlidersHorizontal, Languages } from "lucide-react";
 import { MapleLeaf } from "@/components/MapleLeaf";
 import { apiPost, type Overview, type ScanResult, apiGet } from "@/lib/api";
 import { fmtFull, getZhUnit, setZhUnit } from "@/lib/utils";
 import { useApp } from "@/store";
+import { useI18nStore, useT } from "@/i18n";
 import { Button } from "@/components/ui/button";
 
 export function Header({
@@ -15,6 +16,8 @@ export function Header({
   onOpenAdjust: () => void;
   onOpenReport: () => void;
 }) {
+  const t = useT();
+  const { lang, setLang } = useI18nStore();
   const bumpRefresh = useApp((s) => s.bumpRefresh);
   const [light, setLight] = useState(() => localStorage.getItem("theme") === "light");
   const [zh, setZh] = useState(getZhUnit());
@@ -27,20 +30,19 @@ export function Header({
     if (scanningRef.current) return;
     scanningRef.current = true;
     setScanning(true);
-    setScanMsg("扫描中…");
     try {
       const res = await apiPost<ScanResult>("/api/scan");
-      let msg = `${res.filesScanned} 个文件 · 新增 ${fmtFull(res.newRecords)} 条`;
-      if (res.skippedDirs?.length) msg += `（⚠ ${res.skippedDirs.length} 个目录不存在）`;
+      let msg = t("header.scanDone", { files: res.filesScanned, records: fmtFull(res.newRecords) });
+      if (res.skippedDirs?.length) msg += t("header.scanSkipped", { n: res.skippedDirs.length });
       setScanMsg(msg);
       bumpRefresh();
     } catch (e) {
-      setScanMsg("扫描失败：" + (e as Error).message);
+      setScanMsg(t("header.scanFail", { msg: (e as Error).message }));
     } finally {
       scanningRef.current = false;
       setScanning(false);
     }
-  }, [bumpRefresh]);
+  }, [bumpRefresh, t]);
 
   useEffect(() => {
     apiGet<Overview>("/api/overview").then(setFooter).catch(() => {});
@@ -77,8 +79,8 @@ export function Header({
             <h1 className="text-sm font-semibold">
               燃枫 <span className="font-normal text-muted-foreground">MapleBurn</span>
             </h1>
-            <p className="max-w-[420px] truncate text-xs text-muted-foreground" title={footer?.logDir}>
-              {footer ? footer.logDir : "本地 Claude Code 用量"}
+            <p className="max-w-105 truncate text-xs text-muted-foreground" title={footer?.logDir}>
+              {footer ? footer.logDir : t("app.subtitle")}
             </p>
           </div>
         </div>
@@ -86,7 +88,7 @@ export function Header({
         <div className="flex items-center gap-1.5">
           <span className="mr-1 hidden text-xs text-muted-foreground md:inline">{scanMsg}</span>
           <Button variant="ghost" size="sm" onClick={onOpenReport}>
-            <FileText /> 报告
+            <FileText /> {t("header.report")}
           </Button>
           <Button
             variant="ghost"
@@ -100,17 +102,25 @@ export function Header({
           >
             {zh ? "万/亿" : "K/M"}
           </Button>
-          <Button variant="ghost" size="icon" onClick={toggleTheme} title="切换主题">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLang(lang === "zh" ? "en" : "zh")}
+            title="中文 / English"
+          >
+            <Languages /> {lang === "zh" ? "EN" : "中"}
+          </Button>
+          <Button variant="ghost" size="icon" onClick={toggleTheme} title={t("header.themeTip")}>
             {light ? <Sun /> : <Moon />}
           </Button>
-          <Button variant="ghost" size="icon" onClick={onOpenSettings} title="日志目录设置">
+          <Button variant="ghost" size="icon" onClick={onOpenSettings} title={t("header.settingsTip")}>
             <Settings />
           </Button>
-          <Button variant="ghost" size="icon" onClick={onOpenAdjust} title="统计校准">
+          <Button variant="ghost" size="icon" onClick={onOpenAdjust} title={t("header.adjustTip")}>
             <SlidersHorizontal />
           </Button>
           <Button size="sm" onClick={scan} disabled={scanning}>
-            <RefreshCw className={scanning ? "animate-spin" : ""} /> 扫描日志
+            <RefreshCw className={scanning ? "animate-spin" : ""} /> {t("header.scan")}
           </Button>
         </div>
       </div>

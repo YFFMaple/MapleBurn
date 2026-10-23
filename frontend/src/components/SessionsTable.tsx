@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { apiGet, type SessionStat } from "@/lib/api";
 import { fmtFull, fmtNum } from "@/lib/utils";
 import { useApp } from "@/store";
+import { useT } from "@/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export function SessionsTable() {
+  const t = useT();
   const { range, refreshTick, openChat } = useApp();
   const [list, setList] = useState<SessionStat[]>([]);
 
@@ -18,19 +20,19 @@ export function SessionsTable() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>会话列表</CardTitle>
-        <span className="text-xs text-muted-foreground">点击行查看会话内容</span>
+        <CardTitle>{t("sessions.title")}</CardTitle>
+        <span className="text-xs text-muted-foreground">{t("sessions.hint")}</span>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>会话</TableHead>
-              <TableHead>项目</TableHead>
-              <TableHead>模型</TableHead>
-              <TableHead>请求数</TableHead>
-              <TableHead>总 tokens</TableHead>
-              <TableHead>最后活跃</TableHead>
+              <TableHead>{t("sessions.session")}</TableHead>
+              <TableHead>{t("rank.project")}</TableHead>
+              <TableHead>{t("table.model")}</TableHead>
+              <TableHead>{t("table.requests")}</TableHead>
+              <TableHead>{t("sessions.totalTokens")}</TableHead>
+              <TableHead>{t("sessions.lastActive")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -55,7 +57,7 @@ export function SessionsTable() {
           </TableBody>
         </Table>
         {list.length === 0 && (
-          <div className="py-8 text-center text-xs text-muted-foreground">该范围没有会话记录</div>
+          <div className="py-8 text-center text-xs text-muted-foreground">{t("sessions.empty")}</div>
         )}
       </CardContent>
     </Card>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { LayoutDashboard, ScrollText, Radar, Search } from "lucide-react";
 import { useApp } from "@/store";
+import { useT } from "@/i18n";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Header } from "@/components/Header";
 import { DashboardPage } from "@/pages/DashboardPage";
@@ -13,6 +14,7 @@ import { AdjustDialog } from "@/components/dialogs/AdjustDialog";
 import { ReportDialog } from "@/components/dialogs/ReportDialog";
 
 export default function App() {
+  const t = useT();
   const { tab, setTab } = useApp();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
@@ -30,16 +32,16 @@ export default function App() {
         <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
           <TabsList>
             <TabsTrigger value="dashboard">
-              <LayoutDashboard /> 仪表盘
+              <LayoutDashboard /> {t("tabs.dashboard")}
             </TabsTrigger>
             <TabsTrigger value="events">
-              <ScrollText /> 请求流水
+              <ScrollText /> {t("tabs.events")}
             </TabsTrigger>
             <TabsTrigger value="search">
-              <Search /> 搜索
+              <Search /> {t("tabs.search")}
             </TabsTrigger>
             <TabsTrigger value="proxy">
-              <Radar /> 观测代理
+              <Radar /> {t("tabs.proxy")}
             </TabsTrigger>
           </TabsList>
         </Tabs>

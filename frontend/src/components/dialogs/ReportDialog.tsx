@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { Copy, TrendingDown, TrendingUp } from "lucide-react";
 import { apiGet, type Report } from "@/lib/api";
 import { fmtFull, fmtNum } from "@/lib/utils";
+import { useT } from "@/i18n";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
 export function ReportDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+  const t = useT();
   const [period, setPeriod] = useState<"week" | "month">("week");
   const [rep, setRep] = useState<Report | null>(null);
   const [copied, setCopied] = useState(false);
@@ -19,15 +21,15 @@ export function ReportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
   const copyText = async () => {
     if (!rep) return;
-    const t = rep.totals;
+    const x = rep.totals;
     const lines = [
-      `AI Token ${rep.period === "week" ? "周报" : "月报"}（${rep.start} ~ ${rep.end}）`,
-      `总 Tokens：${fmtFull(t.totalTokens)}（输入 ${fmtFull(t.inputTokens)} / 输出 ${fmtFull(t.outputTokens)} / 缓存读 ${fmtFull(t.cacheRead)} / 缓存写 ${fmtFull(t.cacheCreate)}）`,
-      `请求次数：${fmtFull(t.requests)} · 活跃天数：${rep.activeDays}`,
-      "Top 模型：",
+      `MapleBurn ${rep.period === "week" ? t("report.weekName") : t("report.monthName")}（${rep.start} ~ ${rep.end}）`,
+      `${t("report.totalTokens")}：${fmtFull(x.totalTokens)}（${t("table.input")} ${fmtFull(x.inputTokens)} / ${t("table.output")} ${fmtFull(x.outputTokens)} / ${t("table.cacheRead")} ${fmtFull(x.cacheRead)} / ${t("table.cacheCreate")} ${fmtFull(x.cacheCreate)}）`,
+      `${t("report.requests")}：${fmtFull(x.requests)} · ${t("report.activeDays")}：${rep.activeDays}`,
+      `${t("report.topModels")}：`,
       ...rep.models.map(
         (m) =>
-          `  ${m.model}：${fmtFull(m.inputTokens + m.outputTokens + m.cacheCreate + m.cacheRead)} tokens / ${fmtFull(m.requests)} 次`
+          `  ${m.model}：${fmtFull(m.inputTokens + m.outputTokens + m.cacheCreate + m.cacheRead)} tokens / ${fmtFull(m.requests)}`
       ),
     ];
     await navigator.clipboard.writeText(lines.join("\n"));
@@ -43,26 +45,31 @@ export function ReportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       <DialogContent open={open} className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {rep ? `${rep.period === "week" ? "本周" : "本月"}报告（${rep.start} ~ ${rep.end}）` : "周期报告"}
+            {rep
+              ? t("report.title", {
+                  period: rep.period === "week" ? t("report.week") : t("report.month"),
+                  range: `${rep.start} ~ ${rep.end}`,
+                })
+              : t("report.titleDefault")}
           </DialogTitle>
         </DialogHeader>
         <div className="flex gap-2">
           <Button variant={period === "week" ? "default" : "secondary"} size="sm" onClick={() => setPeriod("week")}>
-            本周
+            {t("report.week")}
           </Button>
           <Button variant={period === "month" ? "default" : "secondary"} size="sm" onClick={() => setPeriod("month")}>
-            本月
+            {t("report.month")}
           </Button>
           <div className="flex-1" />
           <Button variant="ghost" size="sm" onClick={copyText}>
-            <Copy /> {copied ? "✓ 已复制" : "复制"}
+            <Copy /> {copied ? t("report.copied") : t("report.copy")}
           </Button>
         </div>
         {rep && (
           <>
             <div className="grid grid-cols-4 gap-3 max-md:grid-cols-2">
               <Cell
-                label="总 Tokens"
+                label={t("report.totalTokens")}
                 value={fmtNum(rep.totals.totalTokens)}
                 sub={
                   pct !== null ? (
@@ -72,24 +79,24 @@ export function ReportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                       {pct}%
                     </span>
                   ) : (
-                    "上期为 0"
+                    t("report.prevZero")
                   )
                 }
               />
-              <Cell label="请求次数" value={fmtFull(rep.totals.requests)} sub={`上期 ${fmtFull(rep.prevTotals.requests)}`} />
+              <Cell label={t("report.requests")} value={fmtFull(rep.totals.requests)} sub={t("report.prev", { n: fmtFull(rep.prevTotals.requests) })} />
               <Cell
-                label="活跃天数"
+                label={t("report.activeDays")}
                 value={String(rep.activeDays)}
-                sub={`日均 ${fmtNum(rep.activeDays > 0 ? Math.round(rep.totals.totalTokens / rep.activeDays) : 0)}`}
+                sub={t("report.dailyAvg", { n: fmtNum(rep.activeDays > 0 ? Math.round(rep.totals.totalTokens / rep.activeDays) : 0) })}
               />
-              <Cell label="输出 Tokens" value={fmtNum(rep.totals.outputTokens)} sub={`上期 ${fmtNum(rep.prevTotals.outputTokens)}`} />
+              <Cell label={t("report.outputTokens")} value={fmtNum(rep.totals.outputTokens)} sub={t("report.prev", { n: fmtNum(rep.prevTotals.outputTokens) })} />
             </div>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Top 模型</TableHead>
-                  <TableHead>请求数</TableHead>
-                  <TableHead>总 tokens</TableHead>
+                  <TableHead>{t("report.topModels")}</TableHead>
+                  <TableHead>{t("table.requests")}</TableHead>
+                  <TableHead>{t("sessions.totalTokens")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

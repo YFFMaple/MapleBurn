@@ -3,12 +3,14 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { apiGet, type FileStat, type ModelStat, type ProjectStat, type ToolStat, type Totals } from "@/lib/api";
 import { fmtFull, fmtNum } from "@/lib/utils";
 import { useApp } from "@/store";
+import { useT } from "@/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PctBar } from "@/components/PctBar";
 
 // 四个排行面板：模型 / 项目 / 工具 / 文件热点，宽度可拖拽调整
 export function RankPanels() {
+  const t = useT();
   const { range, refreshTick } = useApp();
   const [models, setModels] = useState<ModelStat[]>([]);
   const [projects, setProjects] = useState<ProjectStat[]>([]);
@@ -27,7 +29,7 @@ export function RankPanels() {
 
   const modelMax = Math.max(...models.map((m) => m.inputTokens + m.outputTokens + m.cacheCreate + m.cacheRead), 1);
   const projMax = Math.max(...projects.map((p) => p.totalTokens), 1);
-  const toolMax = Math.max(...tools.map((t) => t.count), 1);
+  const toolMax = Math.max(...tools.map((x) => x.count), 1);
   const fileMax = Math.max(...files.map((f) => f.count), 1);
 
   return (
@@ -35,15 +37,15 @@ export function RankPanels() {
       <Panel defaultSize={26} minSize={16}>
         <Card className="mr-1.5 h-full">
           <CardHeader>
-            <CardTitle>模型排行</CardTitle>
+            <CardTitle>{t("rank.models")}</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>模型</TableHead>
-                  <TableHead className="w-14">请求数</TableHead>
-                  <TableHead className="w-16">总量</TableHead>
+                  <TableHead>{t("table.model")}</TableHead>
+                  <TableHead className="w-14">{t("table.requests")}</TableHead>
+                  <TableHead className="w-16">{t("table.total")}</TableHead>
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -68,15 +70,15 @@ export function RankPanels() {
       <Panel defaultSize={25} minSize={16}>
         <Card className="mx-1.5 h-full">
           <CardHeader>
-            <CardTitle>项目排行</CardTitle>
+            <CardTitle>{t("rank.projects")}</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>项目</TableHead>
-                  <TableHead className="w-14">请求数</TableHead>
-                  <TableHead className="w-16">总量</TableHead>
+                  <TableHead>{t("rank.project")}</TableHead>
+                  <TableHead className="w-14">{t("table.requests")}</TableHead>
+                  <TableHead className="w-16">{t("table.total")}</TableHead>
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -98,33 +100,36 @@ export function RankPanels() {
       <Panel defaultSize={24} minSize={16}>
         <Card className="mx-1.5 h-full">
           <CardHeader>
-            <CardTitle>工具使用</CardTitle>
+            <CardTitle>{t("rank.tools")}</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>工具</TableHead>
-                  <TableHead className="w-16">次数</TableHead>
-                  <TableHead className="w-14">失败</TableHead>
+                  <TableHead>{t("rank.tool")}</TableHead>
+                  <TableHead className="w-16">{t("rank.count")}</TableHead>
+                  <TableHead className="w-14">{t("rank.errors")}</TableHead>
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tools.map((t) => (
-                  <TableRow key={t.tool}>
-                    <TableCell className="max-w-0 truncate font-mono text-xs" title={t.tool}>{t.tool}</TableCell>
-                    <TableCell className="text-xs">{fmtFull(t.count)}</TableCell>
+                {tools.map((x) => (
+                  <TableRow key={x.tool}>
+                    <TableCell className="max-w-0 truncate font-mono text-xs" title={x.tool}>{x.tool}</TableCell>
+                    <TableCell className="text-xs">{fmtFull(x.count)}</TableCell>
                     <TableCell className="text-xs">
-                      {t.errors > 0 ? (
-                        <span className="text-destructive" title={`失败率 ${((t.errors / Math.max(t.count, t.errors)) * 100).toFixed(1)}%`}>
-                          {fmtFull(t.errors)}
+                      {x.errors > 0 ? (
+                        <span
+                          className="text-destructive"
+                          title={t("rank.errorRate", { pct: ((x.errors / Math.max(x.count, x.errors)) * 100).toFixed(1) })}
+                        >
+                          {fmtFull(x.errors)}
                         </span>
                       ) : (
                         <span className="text-muted-foreground">0</span>
                       )}
                     </TableCell>
-                    <TableCell><PctBar pct={(t.count / toolMax) * 100} /></TableCell>
+                    <TableCell><PctBar pct={(x.count / toolMax) * 100} /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -136,15 +141,15 @@ export function RankPanels() {
       <Panel defaultSize={25} minSize={16}>
         <Card className="ml-1.5 h-full">
           <CardHeader>
-            <CardTitle>文件热点</CardTitle>
+            <CardTitle>{t("rank.files")}</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>文件</TableHead>
-                  <TableHead className="w-14">操作</TableHead>
-                  <TableHead className="w-14">次数</TableHead>
+                  <TableHead>{t("rank.file")}</TableHead>
+                  <TableHead className="w-14">{t("rank.ops")}</TableHead>
+                  <TableHead className="w-14">{t("rank.count")}</TableHead>
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -162,7 +167,7 @@ export function RankPanels() {
               </TableBody>
             </Table>
             {files.length === 0 && (
-              <div className="py-6 text-center text-xs text-muted-foreground">该范围没有文件操作</div>
+              <div className="py-6 text-center text-xs text-muted-foreground">{t("rank.noFiles")}</div>
             )}
           </CardContent>
         </Card>
