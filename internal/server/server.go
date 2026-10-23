@@ -91,9 +91,9 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, ov)
 }
 
-// handleWidget 桌面小组件的聚合数据
+// handleWidget 桌面小组件的聚合数据，?period=today|week|month
 func (s *Server) handleWidget(w http.ResponseWriter, r *http.Request) {
-	sum, err := s.svc.WidgetSummary()
+	sum, err := s.svc.WidgetData(r.URL.Query().Get("period"))
 	if err != nil {
 		writeErr(w, err)
 		return

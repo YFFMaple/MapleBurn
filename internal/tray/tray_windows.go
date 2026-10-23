@@ -175,6 +175,9 @@ func iconBytes() []byte {
 // Quit 从其他 goroutine 结束托盘（服务关闭时调用）
 func Quit() { systray.Quit() }
 
+// IconBytes 枫叶图标（小组件窗口的任务栏图标也用它）
+func IconBytes() []byte { return iconBytes() }
+
 const runKeyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
 const runValueName = "mapleburn"
 const oldRunValueName = "aitoken"

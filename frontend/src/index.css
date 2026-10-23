@@ -105,3 +105,21 @@ body {
   z-index: 50;
   position: relative;
 }
+
+/* 小组件毛玻璃模式：页面背景透明，让窗口亚克力透出来 */
+html.glass,
+html.glass body {
+  background: transparent !important;
+}
+html.glass .glass-panel {
+  background: rgb(13 15 20 / 68%);
+}
+html.light.glass .glass-panel {
+  background: rgb(255 255 255 / 72%);
+}
+html.glass .glass-panel .bg-card {
+  background: rgb(255 255 255 / 6%);
+}
+html.light.glass .glass-panel .bg-card {
+  background: rgb(255 255 255 / 55%);
+}

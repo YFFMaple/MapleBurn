@@ -135,9 +135,9 @@ func main() {
 	// 托盘悬停提示跟数据走，每分钟刷新一次今日用量
 	go func() {
 		for {
-			if sum, err := svc.WidgetSummary(); err == nil {
+			if sum, err := svc.WidgetData("today"); err == nil {
 				tray.SetTooltip(fmt.Sprintf("燃枫 MapleBurn\n今日 %s tokens · %d 次请求 · 缓存命中 %.1f%%",
-					compactNum(sum.Today.TotalTokens), sum.Today.Requests, sum.CacheHit*100))
+					compactNum(sum.Totals.TotalTokens), sum.Totals.Requests, sum.CacheHit*100))
 			}
 			time.Sleep(time.Minute)
 		}

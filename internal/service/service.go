@@ -98,46 +98,82 @@ func (s *Service) Overview() (*Overview, error) {
 	return ov, nil
 }
 
-// WidgetSummary 桌面小组件一屏需要的全部数据：今日/本周总量、缓存命中率、
-// 今日逐小时分布、观测代理状态。一次请求拿齐，供小组件高频轮询。
-type WidgetSummary struct {
-	Today    store.Totals `json:"today"`
-	Week     store.Totals `json:"week"`
-	CacheHit float64      `json:"cacheHit"` // 0~1
-	Hourly   []int64      `json:"hourly"`   // 今天 24 小时的 token 分布
-	ProxyOn  bool         `json:"proxyOn"`
-	ProxyRun bool         `json:"proxyRun"`
+// WidgetBar 小组件图表的一根柱子：今天=逐小时，本周/本月=逐日
+type WidgetBar struct {
+	Label  string `json:"label"`            // 小时数或日期（MM-DD）
+	Value  int64  `json:"value"`            // token 数
+	Future bool   `json:"future,omitempty"` // 今天时标记还没到点的时段（前端降透明度）
 }
 
-func (s *Service) WidgetSummary() (*WidgetSummary, error) {
+// WidgetData 桌面小组件一屏需要的全部数据：指定周期的总量、缓存命中率、
+// 柱状图序列、本月总量（底栏常驻）、观测代理状态。一次请求拿齐，供高频轮询。
+type WidgetData struct {
+	Period      string       `json:"period"` // today / week / month
+	Totals      store.Totals `json:"totals"`
+	CacheHit    float64      `json:"cacheHit"` // 0~1
+	Bars        []WidgetBar  `json:"bars"`
+	MonthTokens int64        `json:"monthTokens"`
+	ProxyOn     bool         `json:"proxyOn"`
+	ProxyRun    bool         `json:"proxyRun"`
+}
+
+func (s *Service) WidgetData(period string) (*WidgetData, error) {
 	now := time.Now()
 	today := now.Format("2006-01-02")
-	weekStart := now.AddDate(0, 0, -int(now.Weekday()+6)%7).Format("2006-01-02")
+	weekStart := now.AddDate(0, 0, -int(now.Weekday()+6)%7).Format("2006-01-02") // 本周一
+	monthStart := now.Format("2006-01") + "-01"
 
-	w := &WidgetSummary{}
+	w := &WidgetData{Period: period}
+	var start string
+	switch period {
+	case "week":
+		start = weekStart
+	case "month":
+		start = monthStart
+	default:
+		w.Period = "today"
+		start = today
+	}
+
 	var err error
-	if w.Today, err = s.db.TotalsForDate(today); err != nil {
+	if w.Totals, err = s.db.TotalsBetween(start, today); err != nil {
 		return nil, err
 	}
-	if w.Week, err = s.db.TotalsBetween(weekStart, today); err != nil {
-		return nil, err
-	}
-	grid, err := s.db.Heatmap(today, today)
-	if err != nil {
-		return nil, err
-	}
-	dow := (int(now.Weekday()) + 6) % 7 // grid 以周一开头
-	w.Hourly = grid[dow]
-
-	if adj := s.Adjustment(); adj.Active {
-		scaleTotals(&w.Today, adj.Factor)
-		scaleTotals(&w.Week, adj.Factor)
-		for h := range w.Hourly {
-			w.Hourly[h] = int64(math.Round(float64(w.Hourly[h]) * adj.Factor))
+	if w.Period == "today" {
+		grid, err := s.db.Heatmap(today, today)
+		if err != nil {
+			return nil, err
+		}
+		dow := (int(now.Weekday()) + 6) % 7 // grid 以周一开头
+		for h, v := range grid[dow] {
+			w.Bars = append(w.Bars, WidgetBar{Label: strconv.Itoa(h), Value: v, Future: h > now.Hour()})
+		}
+	} else {
+		series, err := s.db.DailySeriesBetween(start, today)
+		if err != nil {
+			return nil, err
+		}
+		for _, d := range series {
+			w.Bars = append(w.Bars, WidgetBar{Label: d.Date[5:], Value: int64(d.TotalTokens)})
 		}
 	}
-	if in := w.Today.InputTokens + w.Today.CacheCreate + w.Today.CacheRead; in > 0 {
-		w.CacheHit = float64(w.Today.CacheRead) / float64(in)
+
+	adj := s.Adjustment()
+	if adj.Active {
+		scaleTotals(&w.Totals, adj.Factor)
+		for i := range w.Bars {
+			w.Bars[i].Value = int64(math.Round(float64(w.Bars[i].Value) * adj.Factor))
+		}
+	}
+	if in := w.Totals.InputTokens + w.Totals.CacheCreate + w.Totals.CacheRead; in > 0 {
+		w.CacheHit = float64(w.Totals.CacheRead) / float64(in)
+	}
+	if month, err := s.db.TotalsBetween(monthStart, today); err == nil {
+		factor := 1.0
+		if adj.Active {
+			factor = adj.Factor
+		}
+		w.MonthTokens = int64(math.Round(float64(month.TotalTokens) * factor))
 	}
 	st := s.ProxyStatus()
 	w.ProxyOn = st.Enabled

@@ -23,10 +23,11 @@ type ProxyConfig struct {
 	PrevBaseURLExists bool   `json:"prevBaseURLExists,omitempty"`
 }
 
-// WidgetConfig 桌面小组件窗口：开关、置顶与上次位置
+// WidgetConfig 桌面小组件窗口：开关、置顶、毛玻璃与上次位置
 type WidgetConfig struct {
 	Open    bool `json:"open"`
 	Topmost bool `json:"topmost"`
+	Glass   bool `json:"glass"` // 毛玻璃半透明效果
 	X       int  `json:"x"`
 	Y       int  `json:"y"`
 	HasPos  bool `json:"hasPos"` // 是否存过位置（首次打开走默认位置）
