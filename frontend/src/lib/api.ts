@@ -88,6 +88,7 @@ export interface Report {
   prevTotals: Totals;
   activeDays: number;
   models: ModelStat[];
+  daily: DayStat[];
 }
 
 export interface SessionMessage {

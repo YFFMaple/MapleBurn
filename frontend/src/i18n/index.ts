@@ -188,7 +188,10 @@ const zh = {
   "report.month": "本月",
   "report.title": "{period}报告（{range}）",
   "report.titleDefault": "周期报告",
-  "report.copy": "复制",
+  "report.copyText": "复制文本",
+  "report.copyImage": "复制图片",
+  "report.imageCopied": "✓ 图片已复制",
+  "report.imageSaved": "✓ 图片已下载",
   "report.copied": "✓ 已复制",
   "report.totalTokens": "总 Tokens",
   "report.requests": "请求次数",
@@ -430,7 +433,10 @@ const en: Record<Key, string> = {
   "report.month": "This month",
   "report.title": "{period} report ({range})",
   "report.titleDefault": "Period report",
-  "report.copy": "Copy",
+  "report.copyText": "Copy text",
+  "report.copyImage": "Copy image",
+  "report.imageCopied": "✓ Image copied",
+  "report.imageSaved": "✓ Image downloaded",
   "report.copied": "✓ Copied",
   "report.totalTokens": "Total Tokens",
   "report.requests": "Requests",
@@ -539,3 +545,6 @@ export function useT() {
   const lang = useI18nStore((s) => s.lang);
   return (key: Key, vars?: Vars) => t(lang, key, vars);
 }
+
+// TFunc useT() 返回的翻译函数类型（传给非组件的渲染器用）
+export type TFunc = ReturnType<typeof useT>;

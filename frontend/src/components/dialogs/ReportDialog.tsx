@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Copy, TrendingDown, TrendingUp } from "lucide-react";
+import { Copy, ImageDown, TrendingDown, TrendingUp } from "lucide-react";
 import { apiGet, type Report } from "@/lib/api";
+import { exportReportImage } from "@/lib/reportCard";
 import { fmtFull, fmtNum } from "@/lib/utils";
 import { useT } from "@/i18n";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,6 +14,7 @@ export function ReportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const [period, setPeriod] = useState<"week" | "month">("week");
   const [rep, setRep] = useState<Report | null>(null);
   const [copied, setCopied] = useState(false);
+  const [imgState, setImgState] = useState<"" | "clipboard" | "download">("");
 
   useEffect(() => {
     if (!open) return;
@@ -35,6 +37,18 @@ export function ReportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     await navigator.clipboard.writeText(lines.join("\n"));
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  };
+
+  // 导出图片：渲染成卡片 PNG，优先进剪贴板，不行就下载
+  const exportImage = async () => {
+    if (!rep) return;
+    try {
+      const how = await exportReportImage(rep, t);
+      setImgState(how);
+      setTimeout(() => setImgState(""), 1500);
+    } catch {
+      /* 渲染失败就算了，不动 UI */
+    }
   };
 
   const delta = rep ? rep.totals.totalTokens - rep.prevTotals.totalTokens : 0;
@@ -61,8 +75,11 @@ export function ReportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             {t("report.month")}
           </Button>
           <div className="flex-1" />
+          <Button size="sm" onClick={exportImage}>
+            <ImageDown /> {imgState === "clipboard" ? t("report.imageCopied") : imgState === "download" ? t("report.imageSaved") : t("report.copyImage")}
+          </Button>
           <Button variant="ghost" size="sm" onClick={copyText}>
-            <Copy /> {copied ? t("report.copied") : t("report.copy")}
+            <Copy /> {copied ? t("report.copied") : t("report.copyText")}
           </Button>
         </div>
         {rep && (

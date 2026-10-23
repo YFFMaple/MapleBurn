@@ -344,6 +344,7 @@ type Report struct {
 	PrevTotals store.Totals      `json:"prevTotals"`
 	ActiveDays int               `json:"activeDays"`
 	Models     []store.ModelStat `json:"models"` // top 模型
+	Daily      []store.DayStat   `json:"daily"`  // 区间内逐日用量（报告卡片画柱状图用）
 }
 
 func (s *Service) Report(period string) (*Report, error) {
@@ -381,11 +382,17 @@ func (s *Service) Report(period string) (*Report, error) {
 	if len(rep.Models) > 5 {
 		rep.Models = rep.Models[:5]
 	}
+	if rep.Daily, err = s.db.DailySeriesBetween(fmtDate(start), end); err != nil {
+		return nil, err
+	}
 	if adj := s.Adjustment(); adj.Active {
 		scaleTotals(&rep.Totals, adj.Factor)
 		scaleTotals(&rep.PrevTotals, adj.Factor)
 		for i := range rep.Models {
 			scaleModel(&rep.Models[i], adj.Factor)
+		}
+		for i := range rep.Daily {
+			scaleTotals(&rep.Daily[i].Totals, adj.Factor)
 		}
 	}
 	return rep, nil
