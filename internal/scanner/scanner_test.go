@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/YFFMaple/aitoken/internal/pricing"
-	"github.com/YFFMaple/aitoken/internal/scanner"
-	"github.com/YFFMaple/aitoken/internal/store"
+	"github.com/YFFMaple/MapleBurn/internal/scanner"
+	"github.com/YFFMaple/MapleBurn/internal/store"
 )
 
 // 用真实的 ~/.claude/projects 日志验证扫描、入库与去重
@@ -20,7 +19,7 @@ func TestScanRealLogs(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := scanner.New(db, pricing.Load(t.TempDir()), []string{
+	s := scanner.New(db, []string{
 		filepath.Join(os.Getenv("USERPROFILE"), ".claude", "projects"),
 	})
 

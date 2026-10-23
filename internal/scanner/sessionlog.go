@@ -22,8 +22,8 @@ type SessionMessage struct {
 }
 
 const (
-	maxSessionMessages = 2000  // 单个会话最多返回的消息数
-	maxMessageRunes    = 8000  // 单条消息最大字符数（超出截断）
+	maxSessionMessages = 2000 // 单个会话最多返回的消息数
+	maxMessageRunes    = 8000 // 单条消息最大字符数（超出截断）
 )
 
 // msgLine 日志行的消息部分（content 可能是字符串或块数组）
