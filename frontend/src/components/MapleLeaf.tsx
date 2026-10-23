@@ -1,0 +1,14 @@
+// 枫叶 Logo（与托盘图标同一轮廓）
+export function MapleLeaf({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      className={className}
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      <polygon points="50,2 56,18 68,11 64,28 82,21 75,38 94,33 84,50 97,57 72,64 78,79 60,76 57,88 53,88 53,98 47,98 47,88 43,88 40,76 22,79 28,64 3,57 16,50 6,33 25,38 18,21 36,28 32,11 44,18" />
+    </svg>
+  );
+}
