@@ -17,18 +17,32 @@ import (
 )
 
 var (
-	user32        = windows.NewLazySystemDLL("user32.dll")
-	setWindowPos  = user32.NewProc("SetWindowPos")
-	getWindowRect = user32.NewProc("GetWindowRect")
-	isIconic      = user32.NewProc("IsIconic")
+	user32          = windows.NewLazySystemDLL("user32.dll")
+	dwmapi          = windows.NewLazySystemDLL("dwmapi.dll")
+	setWindowPos    = user32.NewProc("SetWindowPos")
+	getWindowRect   = user32.NewProc("GetWindowRect")
+	isIconic        = user32.NewProc("IsIconic")
+	getWindowLong   = user32.NewProc("GetWindowLongPtrW")
+	setWindowLong   = user32.NewProc("SetWindowLongPtrW")
+	releaseCapture  = user32.NewProc("ReleaseCapture")
+	sendMessage     = user32.NewProc("SendMessageW")
+	showWindow      = user32.NewProc("ShowWindow")
+	dwmSetAttribute = dwmapi.NewProc("DwmSetWindowAttribute")
 )
 
 const (
-	swpNosize     = 0x1
-	swpNomove     = 0x2
-	swpNoactivate = 0x10
-	hwndTopmost   = ^uintptr(0)     // -1
-	hwndNotopmost = ^uintptr(0) - 1 // -2
+	swpNosize       = 0x1
+	swpNomove       = 0x2
+	swpNozorder     = 0x4
+	swpNoactivate   = 0x10
+	swpFramechanged = 0x20
+	hwndTopmost     = ^uintptr(0)     // -1
+	hwndNotopmost   = ^uintptr(0) - 1 // -2
+
+	gwlStyle        = ^uintptr(15) // -16
+	wmNclbuttondown = 0xA1
+	htcaption       = 2
+	swMinimize      = 6
 )
 
 // Manager 小组件窗口生命周期：同一时刻最多一个窗口，开关状态持久化到配置
@@ -125,10 +139,23 @@ func (m *Manager) loop(url string) {
 	m.mu.Unlock()
 
 	wc := m.cfg.WidgetCfg()
-	w.SetSize(320, 560, webview2.HintNone)
-	w.SetSize(300, 480, webview2.HintMin) // 最小尺寸，避免被拖成一条标题栏
-	w.Navigate(url)
 	hwnd := uintptr(w.Window())
+	makeFrameless(hwnd)
+	w.SetSize(320, 520, webview2.HintNone)
+	w.SetSize(300, 420, webview2.HintMin) // 最小尺寸，避免被拖成一条
+	w.Navigate(url)
+
+	// 自绘标题栏的拖拽/最小化/关闭都经绑定回到这里
+	w.Bind("widgetDrag", func() {
+		releaseCapture.Call()
+		sendMessage.Call(hwnd, wmNclbuttondown, htcaption, 0)
+	})
+	w.Bind("widgetMinimize", func() {
+		showWindow.Call(hwnd, swMinimize)
+	})
+	w.Bind("widgetClose", func() {
+		w.Terminate()
+	})
 
 	// 面板里的置顶按钮直接调这个绑定
 	w.Bind("widgetSetTopmost", func(top bool) {
@@ -175,4 +202,22 @@ func setTopmost(hwnd uintptr, top bool) {
 		after = hwndTopmost
 	}
 	setWindowPos.Call(hwnd, after, 0, 0, 0, 0, swpNosize|swpNomove|swpNoactivate)
+}
+
+// makeFrameless 去掉标题栏和系统菜单，保留粗边框（可拖拽缩放）与最小化按钮。
+// 注意不能改成 WS_POPUP——实测会导致 WebView2 子窗口不创建，页面白屏。
+// Win11 上顺便请求 DWM 圆角，Win10 忽略失败保持直角。
+func makeFrameless(hwnd uintptr) {
+	const (
+		wsCaption  = 0xC00000
+		wsSysmenu  = 0x80000
+		wsMaximize = 0x10000
+	)
+	style, _, _ := getWindowLong.Call(hwnd, gwlStyle)
+	style &^= (wsCaption | wsSysmenu | wsMaximize)
+	setWindowLong.Call(hwnd, gwlStyle, style)
+	setWindowPos.Call(hwnd, 0, 0, 0, 0, 0, swpNosize|swpNomove|swpNozorder|swpNoactivate|swpFramechanged)
+
+	val := uint32(2) // DWMWCP_ROUND
+	dwmSetAttribute.Call(hwnd, 33, uintptr(unsafe.Pointer(&val)), 4) // DWMWA_WINDOW_CORNER_PREFERENCE
 }

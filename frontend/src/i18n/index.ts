@@ -248,6 +248,8 @@ const zh = {
   "widget.openFull": "打开完整面板",
   "widget.proxyOn": "代理已开启",
   "widget.proxyOff": "代理已关闭",
+  "widget.minimize": "最小化",
+  "widget.close": "关闭",
 
   // 通用
   "common.total": "总 tokens",
@@ -481,6 +483,8 @@ const en: Record<Key, string> = {
   "widget.openFull": "Open full dashboard",
   "widget.proxyOn": "Proxy on",
   "widget.proxyOff": "Proxy off",
+  "widget.minimize": "Minimize",
+  "widget.close": "Close",
 
   "common.total": "Total tokens",
   "common.ms": "ms",

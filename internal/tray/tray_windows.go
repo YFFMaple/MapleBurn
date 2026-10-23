@@ -6,10 +6,15 @@ package tray
 import (
 	"os"
 	"path/filepath"
+	"sync/atomic"
 
 	"github.com/getlantern/systray"
 	"golang.org/x/sys/windows/registry"
 )
+
+// ready 托盘图标就绪后才允许外部调 SetTooltip 等接口，
+// 否则 systray 内部句柄还是 nil，会直接 panic
+var ready atomic.Bool
 
 // widgetItem 小组件菜单项，窗口开关状态变化时同步勾选
 var widgetItem *systray.MenuItem
@@ -21,6 +26,7 @@ func Run(onOpen, onExit, onWidget func(), widgetOpen bool) {
 		migrateAutostart()
 		systray.SetIcon(iconBytes())
 		systray.SetTooltip("燃枫 MapleBurn")
+		ready.Store(true)
 		mOpen := systray.AddMenuItem("打开面板", "在浏览器中打开")
 		widgetItem = systray.AddMenuItemCheckbox("小组件", "桌面小窗实时显示今日用量", widgetOpen)
 		systray.AddSeparator()
@@ -54,8 +60,13 @@ func SetWidgetChecked(open bool) {
 	}
 }
 
-// SetTooltip 更新托盘悬停提示（显示实时用量）
-func SetTooltip(text string) { systray.SetTooltip(text) }
+// SetTooltip 更新托盘悬停提示（显示实时用量）；托盘未就绪时静默跳过
+func SetTooltip(text string) {
+	if !ready.Load() {
+		return
+	}
+	systray.SetTooltip(text)
+}
 
 // mapleLeaf 枫叶轮廓（0~100 坐标，对称的多边形，从上尖点顺时针一圈）
 var mapleLeaf = [][2]float64{
