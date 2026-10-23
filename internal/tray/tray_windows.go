@@ -27,7 +27,7 @@ func Run(onOpen, onExit, onWidget func(), widgetOpen bool) {
 	systray.Run(func() {
 		migrateAutostart()
 		systray.SetIcon(iconBytes())
-		systray.SetTooltip("燃枫 MapleBurn")
+		systray.SetTooltip("MapleBurn")
 		ready.Store(true)
 		mOpen := systray.AddMenuItem("打开面板", "在浏览器中打开")
 		widgetChecked.Store(widgetOpen)

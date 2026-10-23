@@ -76,9 +76,7 @@ export function Header({
             <MapleLeaf className="size-5" />
           </div>
           <div className="leading-tight">
-            <h1 className="text-sm font-semibold">
-              燃枫 <span className="font-normal text-muted-foreground">MapleBurn</span>
-            </h1>
+            <h1 className="text-sm font-semibold">MapleBurn</h1>
             <p className="max-w-105 truncate text-xs text-muted-foreground" title={footer?.logDir}>
               {footer ? footer.logDir : t("app.subtitle")}
             </p>

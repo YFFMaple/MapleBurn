@@ -1,4 +1,4 @@
-# 燃枫 MapleBurn
+# MapleBurn
 
 本地 AI 用量统计工具（Windows）。扫描本机 Claude Code 会话日志，统计各模型的 token 消耗，通过本地网页展示。
 

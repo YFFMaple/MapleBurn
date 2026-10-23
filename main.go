@@ -105,7 +105,7 @@ func main() {
 	srv.RegisterAPI(mux)
 
 	fmt.Println("┌──────────────────────────────────────────┐")
-	fmt.Println("│          燃枫 MapleBurn（本地版）         │")
+	fmt.Println("│            MapleBurn（本地版）            │")
 	fmt.Println("└──────────────────────────────────────────┘")
 	fmt.Println()
 	fmt.Println("  访问地址:  ", url)
@@ -136,7 +136,7 @@ func main() {
 	go func() {
 		for {
 			if sum, err := svc.WidgetData("today"); err == nil {
-				tray.SetTooltip(fmt.Sprintf("燃枫 MapleBurn\n今日 %s tokens · %d 次请求 · 缓存命中 %.1f%%",
+				tray.SetTooltip(fmt.Sprintf("MapleBurn\n今日 %s tokens · %d 次请求 · 缓存命中 %.1f%%",
 					compactNum(sum.Totals.TotalTokens), sum.Totals.Requests, sum.CacheHit*100))
 			}
 			time.Sleep(time.Minute)
